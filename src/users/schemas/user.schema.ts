@@ -51,6 +51,9 @@ export class User extends Document {
   @Prop({ type: Number, default: 0 })
   bonusBalance: number;
 
+  @Prop({ default: null })
+  refreshToken?: string; // هش شده‌ی رفرش‌توکن فعلی کاربر
+
   // ===== Security =====
   @Prop({ default: false })
   twoFAEnabled: boolean;

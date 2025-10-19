@@ -7,12 +7,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'forten_secret_key',
+      secretOrKey: process.env.JWT_SECRET || 'forten-secret-key',
     });
   }
 
   async validate(payload: any) {
-    return { userId: payload.id, email: payload.email };
+    return { sub: payload.sub, email: payload.email };
   }
 }
