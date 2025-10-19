@@ -20,7 +20,7 @@ export class User extends Document {
   phone?: string;
 
   @Prop({ default: null })
-  avatar?: string; // آدرس عکس پروفایل
+  avatar?: string;
 
   @Prop({ required: true })
   password: string;
@@ -30,35 +30,35 @@ export class User extends Document {
   wallet?: string;
 
   @Prop({ unique: true })
-  vxCode: string; // کد FO یا referral code
+  vxCode: string; // referral code
 
   @Prop({ default: null })
-  referredBy?: string; // چه کسی دعوت کرده
+  referredBy?: string;
 
   @Prop({ type: [String], default: [] })
-  referrals?: string[]; // لیست زیرمجموعه‌ها
+  referrals?: string[];
 
   // ===== Financial Balances =====
   @Prop({ type: Number, default: 0 })
-  mainBalance: number; // حساب اصلی (سپرده قابل استفاده)
+  mainBalance: number;
 
   @Prop({ type: Number, default: 0 })
-  profitBalance: number; // سود پکیج‌ها
+  profitBalance: number;
 
   @Prop({ type: Number, default: 0 })
-  referralProfit: number; // سود زیرمجموعه‌ها
+  referralProfit: number;
 
   @Prop({ type: Number, default: 0 })
-  bonusBalance: number; // بونوس‌ها یا پاداش‌ها
+  bonusBalance: number;
 
   // ===== Security =====
   @Prop({ default: false })
-  twoFAEnabled: boolean; // فعال بودن احراز دو مرحله‌ای
+  twoFAEnabled: boolean;
 
   @Prop({ default: null })
   twoFASecret?: string;
 
-  // ===== Meta Info =====
+  // ===== Meta =====
   @Prop({ default: 'user' })
   role: string;
 

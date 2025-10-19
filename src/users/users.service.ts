@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User } from './schemas/user.schema';
@@ -7,15 +7,56 @@ import { User } from './schemas/user.schema';
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<User>) {}
 
-  async createDemoUser() {
-    return this.userModel.create({
-      username: 'demo',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'demo@example.com',
-      password: '123456',
-      vxCode: 'FO-10001',
-    });
+  // 🟢 ایجاد کاربر جدید
+  async create(data: Partial<User>): Promise<User> {
+    const user = new this.userModel(data);
+    return user.save();
   }
+
+  // 🔍 پیدا کردن با ایمیل
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userModel.findOne({ email }).exec();
+  }
+
+  // 🔍 پیدا کردن با ID
+  async findById(id: string): Promise<User | null> {
+    return this.userModel.findById(id).exec();
+  }
+
+  // 🔍 پیدا کردن با نام کاربری
+  async findByUsername(username: string): Promise<User | null> {
+    return this.userModel.findOne({ username }).exec();
+  }
+
+  // 🧾 دریافت همه کاربران (برای admin)
+  async findAll(): Promise<User[]> {
+    return this.userModel.find().select('-password').exec();
+  }
+
+  // ✏️ آپدیت اطلاعات کاربر
+  async updateUser(id: string, data: Partial<User>): Promise<User> {
+    const user = await this.userModel.findByIdAndUpdate(id, data, { new: true });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+ // 💰 افزودن مبلغ به یکی از حساب‌ها
+async addBalance(
+  userId: string,
+  type: 'mainBalance' | 'profitBalance' | 'referralProfit' | 'bonusBalance',
+  amount: number,
+) {
+  const user = await this.findById(userId);
+  if (!user) throw new NotFoundException('User not found');
+
+  user[type] = (user[type] ?? 0) + amount; // اطمینان از عدد بودن فیلد
+  await user.save();
+  return user;
 }
 
+
+  // 🧨 حذف کاربر (در صورت نیاز)
+  async deleteUser(id: string) {
+    return this.userModel.findByIdAndDelete(id);
+  }
+}
