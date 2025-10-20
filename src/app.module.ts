@@ -10,10 +10,24 @@ import { TransactionsModule } from './transactions/transactions.module';
 import { ReferralsModule } from './referrals/referrals.module';
 import { BonusesModule } from './bonuses/bonuses.module';
 import { ActivityModule } from './activity/activity.module';
+import { PaymentsModule } from './payments/payments.module';
+import { ConfigModule } from '@nestjs/config';
 
 
 @Module({
-  imports: [AuthModule, UsersModule , MongooseModule.forRoot('mongodb://localhost:27017/forten'), PackagesModule, InvestmentsModule, TransactionsModule, ReferralsModule, BonusesModule, ActivityModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }), // ✅ اضافه شد
+    AuthModule,
+    UsersModule,
+    MongooseModule.forRoot('mongodb://localhost:27017/forten'),
+    PackagesModule,
+    InvestmentsModule,
+    TransactionsModule,
+    ReferralsModule,
+    BonusesModule,
+    ActivityModule,
+    PaymentsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
