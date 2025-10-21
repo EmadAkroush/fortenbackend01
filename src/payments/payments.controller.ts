@@ -12,7 +12,7 @@ export class PaymentsController {
     @Req() req,
     @Body() body: { amountUsd: number },
   ) {
-    const userId = req.user.userId;
+    const userId = req.user.sub; // ✅ مقدار درست از JWT
     return this.paymentsService.createTrxPayment(userId, body.amountUsd);
   }
 

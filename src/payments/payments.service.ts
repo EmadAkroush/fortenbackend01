@@ -1,9 +1,9 @@
-import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import axios from 'axios';
-import { ConfigService } from '@nestjs/config';
 import { Payment } from './payment.schema';
+import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
 
@@ -18,113 +18,70 @@ export class PaymentsService {
     private readonly transactionsService: TransactionsService,
   ) {}
 
-  /**
-   * ✅ مرحله اول: ساخت پرداخت TRX با NOWPayments
-   */
   async createTrxPayment(userId: string, amountUsd: number) {
     try {
       const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
-      const appUrl = this.config.get('APP_URL') || 'http://127.0.0.1:3000';
+      const appUrl = this.config.get('APP_URL');
 
-      if (!apiKey) throw new Error('NOWPayments API key missing');
-
-      const createResp = await axios.post(
+      const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
           price_amount: amountUsd,
-          price_currency: 'usd',
-          pay_currency: 'trx',
+          price_currency: 'USD',
+          pay_currency: 'TRX',
           order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
         },
         {
-          headers: {
-            'x-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'x-api-key': apiKey },
         },
       );
 
-      const data = createResp.data;
-
-      // ثبت در دیتابیس
       const payment = await this.paymentModel.create({
-        userId,
+        userId,                                // ✅ اضافه شد
+        paymentId: response.data.payment_id,
+        status: response.data.payment_status,
         amount: amountUsd,
-        currency: 'TRX',
-        paymentId: data.payment_id,
-        status: data.payment_status || 'waiting',
-        payAddress: data.pay_address,
-        payAmount: data.pay_amount,
-        statusUrl: data.invoice_url,
+        currency: 'USD',
+        payCurrency: 'TRX',
+        payAddress: response.data.pay_address,
       });
 
-      this.logger.log(`Payment created for user ${userId} | ID: ${data.payment_id}`);
-
       return {
-        success: true,
-        paymentId: data.payment_id,
-        address: data.pay_address,
-        payAmount: data.pay_amount,
-        redirect: data.invoice_url,
+        message: 'Payment created successfully',
+        paymentId: payment.paymentId,
+        payAddress: response.data.pay_address, // لینک پرداخت برای نمایش به کاربر
       };
     } catch (error) {
-      this.logger.error('Error creating payment', error.response?.data || error.message);
-      throw new HttpException('Payment creation failed', HttpStatus.INTERNAL_SERVER_ERROR);
+      this.logger.error('Error creating payment', error);
+      throw error;
     }
   }
 
-  /**
-   * ✅ مرحله دوم: مدیریت IPN callback از NOWPayments
-   */
+  // ✅ IPN Handler (تأیید پرداخت و به‌روزرسانی)
   async handleIpn(data: any) {
-    try {
-      this.logger.log(`Received IPN for payment ${data.payment_id}`);
+    const payment = await this.paymentModel.findOne({ paymentId: data.payment_id });
+    if (!payment) return;
 
-      const payment = await this.paymentModel.findOne({ paymentId: data.payment_id });
-      if (!payment) {
-        this.logger.warn(`Payment ${data.payment_id} not found`);
-        return;
-      }
+    payment.status = data.payment_status;
 
-      payment.status = data.payment_status;
+    if (data.payment_status === 'finished') {
+      payment.confirmedAt = new Date();
+      payment.txHash = data.payin_hash;
 
-      if (data.payment_status === 'finished') {
-        payment.confirmedAt = new Date();
-        payment.txHash = data.payin_hash;
-        await payment.save();
+      // ثبت تراکنش
+      await this.transactionsService.createTransaction({
+        userId: payment.userId,
+        type: 'deposit',
+        amount: payment.amount,
+        currency: 'USD',
+        note: `Deposit confirmed via NOWPayments (TRX) #${payment.paymentId}`,
+      });
 
-        // لاگ تراکنش
-        await this.transactionsService.createTransaction({
-          userId: payment.userId,
-          type: 'deposit',
-          amount: payment.amount,
-          currency: 'USD',
-          status: 'completed',
-          note: `Deposit confirmed via NOWPayments TRX | TX: ${data.payin_hash}`,
-        });
-
-        // بروزرسانی موجودی حساب اصلی
-        await this.usersService.updateBalance(payment.userId, 'mainBalance', payment.amount);
-
-        this.logger.log(`Payment ${payment.paymentId} confirmed and user ${payment.userId} credited`);
-      } else {
-        await payment.save();
-        this.logger.log(`Payment ${payment.paymentId} updated: ${data.payment_status}`);
-      }
-    } catch (error) {
-      this.logger.error('IPN Handling Error', error.message);
+      // افزودن مبلغ به حساب اصلی
+      await this.usersService.addBalance(payment.userId, 'mainBalance', payment.amount);
     }
-  }
 
-  /**
-   * ✅ بررسی وضعیت پرداخت (در صورت نیاز برای Admin Panel)
-   */
-  async checkPaymentStatus(paymentId: string) {
-    const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
-    const resp = await axios.get(`https://api.nowpayments.io/v1/payment/${paymentId}`, {
-      headers: { 'x-api-key': apiKey },
-    });
-    return resp.data;
+    await payment.save();
   }
 }
