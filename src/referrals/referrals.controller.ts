@@ -6,7 +6,6 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
-  // 📥 اتصال لیدر از تنظیمات پروفایل
   @UseGuards(JwtAuthGuard)
   @Post('set-leader')
   async setLeader(@Req() req, @Body() body: { referrerCode: string }) {
@@ -14,11 +13,18 @@ export class ReferralsController {
     return this.referralsService.registerReferral(body.referrerCode, userId);
   }
 
-  // 📊 لیست زیرمجموعه‌ها
   @UseGuards(JwtAuthGuard)
   @Get('my-team')
   async getMyTeam(@Req() req) {
     const userId = req.user.userId;
     return this.referralsService.getUserReferrals(userId);
+  }
+
+  // 📊 مسیر جدید برای آمار کلی ریفرال‌ها
+  @UseGuards(JwtAuthGuard)
+  @Get('stats')
+  async getReferralStats(@Req() req) {
+    const userId = req.user.userId;
+    return this.referralsService.getReferralStats(userId);
   }
 }

@@ -5,7 +5,6 @@ import { Referral } from './schemas/referrals.schema';
 import { UsersService } from '../users/users.service';
 import * as mongoose from 'mongoose'; // 👈 این خط اضافه شده
 
-
 @Injectable()
 export class ReferralsService {
   constructor(
@@ -37,8 +36,7 @@ export class ReferralsService {
     });
 
     // افزودن آی‌دی زیرمجموعه در کاربر لیدر
-     referrer.referrals.push(new mongoose.Types.ObjectId(newUser._id.toString()));
-
+    referrer.referrals.push(new mongoose.Types.ObjectId(newUser._id.toString()));
     await referrer.save();
 
     return {
@@ -74,5 +72,28 @@ export class ReferralsService {
     );
 
     await this.usersService.addBalance(referrerId, 'referralProfit', amount);
+  }
+
+  // 🧮 آمار کلی زیرمجموعه‌ها (تعداد + مجموع سود + کل سرمایه‌گذاری زیرمجموعه‌ها)
+  async getReferralStats(userId: string) {
+    const referrals = await this.getUserReferrals(userId);
+
+    const totalReferrals = referrals.length;
+    const totalProfit = referrals.reduce((sum, r) => sum + (r.profitEarned || 0), 0);
+
+    // محاسبه مجموع سرمایه‌گذاری زیرمجموعه‌ها از usersService
+    const referredUsers = await Promise.all(
+      referrals.map(async (r) => {
+        const user = await this.usersService.findByEmail(r.user.email);
+        return user ? user.mainBalance + user.profitBalance : 0;
+      }),
+    );
+    const totalInvested = referredUsers.reduce((a, b) => a + b, 0);
+
+    return {
+      totalReferrals,
+      totalProfit,
+      totalInvested,
+    };
   }
 }
