@@ -18,6 +18,11 @@ export class UsersService {
     return this.userModel.findOne({ email }).exec();
   }
 
+  // داخل UsersService اضافه کن 👇
+  async findByVxCode(vxCode: string): Promise<User | null> {
+    return this.userModel.findOne({ vxCode });
+  }
+
   // 🔍 پیدا کردن با ID
   async findById(id: string): Promise<User | null> {
     return this.userModel.findById(id).exec();
@@ -35,25 +40,26 @@ export class UsersService {
 
   // ✏️ آپدیت اطلاعات کاربر
   async updateUser(id: string, data: Partial<User>): Promise<User> {
-    const user = await this.userModel.findByIdAndUpdate(id, data, { new: true });
+    const user = await this.userModel.findByIdAndUpdate(id, data, {
+      new: true,
+    });
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
- // 💰 افزودن مبلغ به یکی از حساب‌ها
-async addBalance(
-  userId: string,
-  type: 'mainBalance' | 'profitBalance' | 'referralProfit' | 'bonusBalance',
-  amount: number,
-) {
-  const user = await this.findById(userId);
-  if (!user) throw new NotFoundException('User not found');
+  // 💰 افزودن مبلغ به یکی از حساب‌ها
+  async addBalance(
+    userId: string,
+    type: 'mainBalance' | 'profitBalance' | 'referralProfit' | 'bonusBalance',
+    amount: number,
+  ) {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
 
-  user[type] = (user[type] ?? 0) + amount; // اطمینان از عدد بودن فیلد
-  await user.save();
-  return user;
-}
-
+    user[type] = (user[type] ?? 0) + amount; // اطمینان از عدد بودن فیلد
+    await user.save();
+    return user;
+  }
 
   // 🧨 حذف کاربر (در صورت نیاز)
   async deleteUser(id: string) {

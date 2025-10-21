@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import * as mongoose from 'mongoose'; // 👈 این خط اضافه شده
 
 @Schema({ timestamps: true })
 export class User extends Document {
@@ -35,8 +36,11 @@ export class User extends Document {
   @Prop({ default: null })
   referredBy?: string;
 
-  @Prop({ type: [String], default: [] })
-  referrals?: string[];
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    default: [],
+  })
+  referrals: mongoose.Types.ObjectId[];
 
   // ===== Financial Balances =====
   @Prop({ type: Number, default: 0 })
