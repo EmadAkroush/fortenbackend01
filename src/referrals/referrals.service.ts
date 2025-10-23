@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Referral } from './schemas/referrals.schema';
 import { UsersService } from '../users/users.service';
-import * as mongoose from 'mongoose'; // 👈 این خط اضافه شده
+import * as mongoose from 'mongoose';
 
 @Injectable()
 export class ReferralsService {
@@ -54,7 +54,7 @@ export class ReferralsService {
   async getUserReferrals(userId: string) {
     const referrals = await this.referralModel
       .find({ referrer: new Types.ObjectId(userId) })
-      .populate('referredUser', 'firstName lastName email vxCode')
+      .populate('referredUser', 'firstName lastName email vxCode mainBalance profitBalance')
       .exec();
 
     return referrals.map((r) => ({
@@ -84,10 +84,12 @@ export class ReferralsService {
     // محاسبه مجموع سرمایه‌گذاری زیرمجموعه‌ها از usersService
     const referredUsers = await Promise.all(
       referrals.map(async (r) => {
-        const user = await this.usersService.findByEmail(r.user.email);
+        // 👇 اینجا به‌جای r.user.email از r.user._id استفاده می‌کنیم
+        const user = await this.usersService.findById(r.user._id.toString());
         return user ? user.mainBalance + user.profitBalance : 0;
       }),
     );
+
     const totalInvested = referredUsers.reduce((a, b) => a + b, 0);
 
     return {
@@ -95,5 +97,26 @@ export class ReferralsService {
       totalProfit,
       totalInvested,
     };
+  }
+
+  // 🔍 دریافت جزئیات هر نود (برای دیدن زیرمجموعه سطح پایین)
+  async getReferralNodeDetails(userId: string) {
+    const referrals = await this.referralModel
+      .find({ referrer: new Types.ObjectId(userId) })
+      .populate('referredUser', 'firstName lastName email vxCode mainBalance profitBalance')
+      .exec();
+
+    return referrals.map((r) => ({
+      id: r.referredUser['_id'],
+      name: `${r.referredUser['firstName']} ${r.referredUser['lastName']}`,
+      email: r.referredUser['email'],
+      vxCode: r.referredUser['vxCode'],
+      balances: {
+        main: r.referredUser['mainBalance'],
+        profit: r.referredUser['profitBalance'],
+      },
+      profitEarned: r.profitEarned,
+      joinedAt: r.joinedAt,
+    }));
   }
 }
