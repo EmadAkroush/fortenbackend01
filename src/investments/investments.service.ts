@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Investment } from './schemas/investments.schema';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
 import { User } from '../users/schemas/user.schema';
@@ -8,6 +9,8 @@ import { Package } from '../packages/schemas/packages.schema';
 
 @Injectable()
 export class InvestmentsService {
+  private readonly logger = new Logger(InvestmentsService.name);
+
   constructor(
     @InjectModel(Investment.name) private investmentModel: Model<Investment>,
     @InjectModel(User.name) private userModel: Model<User>,
@@ -54,22 +57,36 @@ export class InvestmentsService {
       .sort({ createdAt: -1 });
   }
 
-  // 🟠 محاسبه سود روزانه برای همه سرمایه‌گذاری‌ها (مثلاً CronJob روزانه)
+  // 🟠 محاسبه سود روزانه (تابع معمولی برای CronJob)
   async calculateDailyProfits() {
     const investments = await this.investmentModel.find({ status: 'active' });
 
     for (const inv of investments) {
       const profit = (inv.amount * inv.dailyRate) / 100;
+
+      // افزودن سود به مجموع سرمایه‌گذاری
       inv.totalProfit += profit;
       await inv.save();
 
-      // سود روزانه به حساب سود کاربر هم اضافه می‌شود
+      // افزودن سود به حساب سود کاربر
       await this.userModel.findByIdAndUpdate(inv.user, {
         $inc: { profitBalance: profit },
       });
+
+      this.logger.log(
+        `💰 Profit ${profit.toFixed(2)} USD added for user ${inv.user.toString()} (Investment: ${inv._id})`,
+      );
     }
 
+    this.logger.log('✅ Daily profits calculation completed successfully.');
     return { message: 'Daily profits calculated successfully' };
+  }
+
+  // 🕒 کرون جاب خودکار برای محاسبه سود پکیج‌ها هر 24 ساعت
+  @Cron(CronExpression.EVERY_DAY_AT_1AM)
+  async autoCalculateProfits() {
+    this.logger.log('⏰ Starting daily profit calculation (cron job)...');
+    await this.calculateDailyProfits();
   }
 
   // 🔴 لغو سرمایه‌گذاری (بازگشت سرمایه اصلی)
