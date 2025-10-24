@@ -12,6 +12,8 @@ import { BonusesModule } from './bonuses/bonuses.module';
 import { ActivityModule } from './activity/activity.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
+
 
 
 @Module({
@@ -27,6 +29,7 @@ import { ConfigModule } from '@nestjs/config';
     BonusesModule,
     ActivityModule,
     PaymentsModule,
+    ScheduleModule.forRoot(),
   ],
   controllers: [AppController],
   providers: [AppService],

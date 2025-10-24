@@ -44,4 +44,15 @@ export class ReferralsController {
   async getReferralNodeDetails(@Param('id') id: string) {
     return this.referralsService.getReferralNodeDetails(id);
   }
+
+  // 💰 اجرای دستی محاسبه سود ریفرال‌ها (برای تست یا ادمین)
+  @Post('calculate-profits')
+  async calculateReferralProfits() {
+    const result = await this.referralsService.calculateReferralProfits();
+    return {
+      success: true,
+      message: 'Referral profit calculation triggered successfully.',
+      result,
+    };
+  }
 }

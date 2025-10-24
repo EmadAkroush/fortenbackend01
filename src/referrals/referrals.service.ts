@@ -1,12 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Referral } from './schemas/referrals.schema';
 import { UsersService } from '../users/users.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import * as mongoose from 'mongoose';
 
 @Injectable()
 export class ReferralsService {
+  private readonly logger = new Logger(ReferralsService.name);
+
   constructor(
     @InjectModel(Referral.name) private referralModel: Model<Referral>,
     private readonly usersService: UsersService,
@@ -25,17 +28,14 @@ export class ReferralsService {
     if (!referrer)
       return { success: false, message: 'Invalid referral code.' };
 
-    // ذخیره در مدل user
     newUser.referredBy = referrer.vxCode;
     await newUser.save();
 
-    // ثبت در مدل referral
     await this.referralModel.create({
       referrer: referrer._id,
       referredUser: newUser._id,
     });
 
-    // افزودن آی‌دی زیرمجموعه در کاربر لیدر
     referrer.referrals.push(new mongoose.Types.ObjectId(newUser._id.toString()));
     await referrer.save();
 
@@ -50,7 +50,7 @@ export class ReferralsService {
     };
   }
 
-  // 📊 دریافت لیست زیرمجموعه‌ها برای کاربر
+  // 📊 لیست زیرمجموعه‌ها
   async getUserReferrals(userId: string) {
     const referrals = await this.referralModel
       .find({ referrer: new Types.ObjectId(userId) })
@@ -64,7 +64,7 @@ export class ReferralsService {
     }));
   }
 
-  // 💰 افزودن سود ریفرال (برای سودهای پکیج‌ها)
+  // 💰 افزودن سود ریفرال
   async addReferralProfit(referrerId: string, amount: number, fromUserId: string) {
     await this.referralModel.findOneAndUpdate(
       { referrer: referrerId, referredUser: fromUserId },
@@ -74,17 +74,14 @@ export class ReferralsService {
     await this.usersService.addBalance(referrerId, 'referralProfit', amount);
   }
 
-  // 🧮 آمار کلی زیرمجموعه‌ها (تعداد + مجموع سود + کل سرمایه‌گذاری زیرمجموعه‌ها)
+  // 📈 آمار کلی زیرمجموعه‌ها
   async getReferralStats(userId: string) {
     const referrals = await this.getUserReferrals(userId);
-
     const totalReferrals = referrals.length;
     const totalProfit = referrals.reduce((sum, r) => sum + (r.profitEarned || 0), 0);
 
-    // محاسبه مجموع سرمایه‌گذاری زیرمجموعه‌ها از usersService
     const referredUsers = await Promise.all(
       referrals.map(async (r) => {
-        // 👇 اینجا به‌جای r.user.email از r.user._id استفاده می‌کنیم
         const user = await this.usersService.findById(r.user._id.toString());
         return user ? user.mainBalance + user.profitBalance : 0;
       }),
@@ -99,7 +96,7 @@ export class ReferralsService {
     };
   }
 
-  // 🔍 دریافت جزئیات هر نود (برای دیدن زیرمجموعه سطح پایین)
+  // 🔍 جزئیات نود (برای نمایش در درخت ریفرال)
   async getReferralNodeDetails(userId: string) {
     const referrals = await this.referralModel
       .find({ referrer: new Types.ObjectId(userId) })
@@ -118,5 +115,46 @@ export class ReferralsService {
       profitEarned: r.profitEarned,
       joinedAt: r.joinedAt,
     }));
+  }
+
+  // 🔄 کرون جاب محاسبه سود ریفرال تا ۳ سطح (هر ۲۴ ساعت)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async calculateReferralProfits() {
+    this.logger.log('🔁 Running daily referral profit calculation...');
+
+    const allUsers = await this.usersService.findAll();
+
+    for (const user of allUsers) {
+      if (!user.referredBy) continue;
+
+      const dailyProfit = user.profitBalance * 0.01; // فرض: سود روزانه ۱٪
+
+      let currentReferrerCode = user.referredBy;
+      let level = 1;
+
+      // 🔹 محاسبه سود فقط تا سطح سوم
+      while (currentReferrerCode && level <= 3) {
+        const referrer = await this.usersService.findByVxCode(currentReferrerCode);
+        if (!referrer) break;
+
+        let percentage = 0;
+        if (level === 1) percentage = 0.15;
+        else if (level === 2) percentage = 0.1;
+        else if (level === 3) percentage = 0.05;
+
+        const reward = dailyProfit * percentage;
+        if (reward > 0) {
+          await this.addReferralProfit(referrer._id.toString(), reward, user._id.toString());
+          this.logger.log(
+            `💰 Level ${level} referral profit: +${reward.toFixed(2)} USD to ${referrer.email} from ${user.email}`,
+          );
+        }
+
+        currentReferrerCode = referrer.referredBy;
+        level++;
+      }
+    }
+
+    this.logger.log('✅ Referral profit distribution (3 levels) completed');
   }
 }
