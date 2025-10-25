@@ -6,6 +6,7 @@ import { Payment } from './payment.schema';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
+import { BonusesService } from '../bonuses/bonuses.service'; // 👈 اضافه شد
 
 @Injectable()
 export class PaymentsService {
@@ -16,8 +17,10 @@ export class PaymentsService {
     private readonly config: ConfigService,
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService,
+    private readonly bonusesService: BonusesService, // 👈 اضافه شد
   ) {}
 
+  // 🟢 ایجاد پرداخت TRX جدید
   async createTrxPayment(userId: string, amountUsd: number) {
     try {
       const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
@@ -38,7 +41,7 @@ export class PaymentsService {
       );
 
       const payment = await this.paymentModel.create({
-        userId,                                // ✅ اضافه شد
+        userId, // ✅ ذخیره آیدی کاربر
         paymentId: response.data.payment_id,
         status: response.data.payment_status,
         amount: amountUsd,
@@ -50,7 +53,7 @@ export class PaymentsService {
       return {
         message: 'Payment created successfully',
         paymentId: payment.paymentId,
-        payAddress: response.data.pay_address, // لینک پرداخت برای نمایش به کاربر
+        payAddress: response.data.pay_address, // ✅ آدرس پرداخت برای نمایش به کاربر
       };
     } catch (error) {
       this.logger.error('Error creating payment', error);
@@ -60,7 +63,9 @@ export class PaymentsService {
 
   // ✅ IPN Handler (تأیید پرداخت و به‌روزرسانی)
   async handleIpn(data: any) {
-    const payment = await this.paymentModel.findOne({ paymentId: data.payment_id });
+    const payment = await this.paymentModel.findOne({
+      paymentId: data.payment_id,
+    });
     if (!payment) return;
 
     payment.status = data.payment_status;
@@ -69,17 +74,34 @@ export class PaymentsService {
       payment.confirmedAt = new Date();
       payment.txHash = data.payin_hash;
 
-      // ثبت تراکنش
+      // 🔹 ثبت تراکنش
       await this.transactionsService.createTransaction({
         userId: payment.userId,
         type: 'deposit',
         amount: payment.amount,
         currency: 'USD',
+        status: 'completed',
         note: `Deposit confirmed via NOWPayments (TRX) #${payment.paymentId}`,
       });
 
-      // افزودن مبلغ به حساب اصلی
-      await this.usersService.addBalance(payment.userId, 'mainBalance', payment.amount);
+      // 🔹 افزایش موجودی حساب اصلی
+      await this.usersService.addBalance(
+        payment.userId,
+        'mainBalance',
+        payment.amount,
+      );
+
+      // 🎁 بررسی پاداش لیدر (فقط اولین سپرده بالای 100 دلار)
+      try {
+        await this.bonusesService.checkAndAwardReferralBonus(
+          payment.userId,
+          payment.amount,
+        );
+      } catch (bonusError) {
+        this.logger.warn(
+          `Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
+        );
+      }
     }
 
     await payment.save();
