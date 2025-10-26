@@ -74,7 +74,7 @@ export class PaymentsService {
       payment.confirmedAt = new Date();
       payment.txHash = data.payin_hash;
 
-      // 🔹 ثبت تراکنش
+      // 🔹 ثبت تراکنش موفق
       await this.transactionsService.createTransaction({
         userId: payment.userId,
         type: 'deposit',
@@ -91,7 +91,7 @@ export class PaymentsService {
         payment.amount,
       );
 
-      // 🎁 بررسی پاداش لیدر (فقط اولین سپرده بالای 100 دلار)
+      // 🎁 بررسی پاداش لیدر
       try {
         await this.bonusesService.checkAndAwardReferralBonus(
           payment.userId,
@@ -102,6 +102,24 @@ export class PaymentsService {
           `Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
         );
       }
+    } else if (
+      ['failed', 'expired', 'refunded', 'cancelled'].includes(
+        data.payment_status,
+      )
+    ) {
+      // ❌ ثبت تراکنش ناموفق در لاگ
+      await this.transactionsService.createTransaction({
+        userId: payment.userId,
+        type: 'deposit',
+        amount: payment.amount,
+        currency: 'USD',
+        status: 'failed',
+        note: `Deposit failed via NOWPayments (TRX) #${payment.paymentId} | Status: ${data.payment_status}`,
+      });
+
+      this.logger.warn(
+        `⚠️ Payment failed for user ${payment.userId} (status: ${data.payment_status})`,
+      );
     }
 
     await payment.save();
