@@ -12,6 +12,8 @@ import { Model } from 'mongoose';
 import { User } from '../users/schemas/user.schema';
 import * as nodemailer from 'nodemailer';
 import { randomBytes } from 'crypto';
+import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class AuthService {
@@ -188,36 +190,66 @@ export class AuthService {
   }
 
   // === Send Password Reset Email ===
-  private async sendResetPasswordEmail(email: string, token: string) {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+  // private async sendResetPasswordEmail(email: string, token: string) {
+  //   const transporter = nodemailer.createTransport({
+  //     service: 'gmail',
+  //     auth: {
+  //       user: process.env.MAIL_USER,
+  //       pass: process.env.MAIL_PASS,
+  //     },
+  //   });
 
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-    const mailOptions = {
-      from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: 'Reset your FORTEN account password',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding:20px;">
-          <h2>Password Reset Request</h2>
-          <p>We received a request to reset your password.</p>
-          <a href="${resetUrl}" style="background:#ffb84d;padding:10px 20px;border-radius:5px;">Reset Password</a>
-          <p>If you didn’t request this, ignore this email.</p>
-        </div>
-      `,
-    };
+    
 
-    try {
-      await transporter.sendMail(mailOptions);
-      console.log(`📧 Password reset email sent to ${email}`);
-    } catch (error) {
-      console.error('❌ Failed to send reset email:', error.message);
-      throw new BadRequestException('Failed to send password reset email');
-    }
-  }
+  //   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  //   const mailOptions = {
+  //     from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
+  //     to: email,
+  //     subject: 'Reset your FORTEN account password',
+  //     html: `
+  //       <div style="font-family: Arial, sans-serif; padding:20px;">
+  //         <h2>Password Reset Request</h2>
+  //         <p>We received a request to reset your password.</p>
+  //         <a href="${resetUrl}" style="background:#ffb84d;padding:10px 20px;border-radius:5px;">Reset Password</a>
+  //         <p>If you didn’t request this, ignore this email.</p>
+  //       </div>
+  //     `,
+  //   };
+
+  //   try {
+  //     await transporter.sendMail(mailOptions);
+  //     console.log(`📧 Password reset email sent to ${email}`);
+  //   } catch (error) {
+  //     console.error('❌ Failed to send reset email:', error.message);
+  //     throw new BadRequestException('Failed to send password reset email');
+  //   }
+  // }
+  private async sendResetPasswordEmail(email: string, token: string, firstName?: string) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  
+  // 📄 مسیر فایل HTML
+  const templatePath = path.resolve(__dirname, '../templates/reset-password-email.html');
+  
+  // 📖 خوندن محتوای HTML
+  let html = fs.readFileSync(templatePath, 'utf8')
+    .replace(/{{resetUrl}}/g, resetUrl)
+    .replace(/{{firstName \|\| 'کاربر'}}/g, firstName || 'کاربر');
+
+  const mailOptions = {
+    from: `"Forten Support" <${process.env.MAIL_USER}>`,
+    to: email,
+    subject: 'بازیابی رمز عبور — Forten',
+    html,
+  };
+
+  await transporter.sendMail(mailOptions);
+}
 }
