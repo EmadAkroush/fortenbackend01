@@ -5,6 +5,8 @@ import { InvestmentsController } from './investments.controller';
 import { Investment, InvestmentSchema } from './schemas/investments.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Package, PackageSchema } from '../packages/schemas/packages.schema';
+import { TransactionsModule } from '../transactions/transactions.module'; // 👈 اضافه شد
+
 
 @Module({
   imports: [
@@ -12,7 +14,9 @@ import { Package, PackageSchema } from '../packages/schemas/packages.schema';
       { name: Investment.name, schema: InvestmentSchema },
       { name: User.name, schema: UserSchema },
       { name: Package.name, schema: PackageSchema },
+      
     ]),
+      TransactionsModule,
   ],
   controllers: [InvestmentsController],
   providers: [InvestmentsService],
