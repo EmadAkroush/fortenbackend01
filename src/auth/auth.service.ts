@@ -59,7 +59,6 @@ export class AuthService {
     const user = await this.userModel.findOne({ verificationToken: token });
     if (!user) throw new NotFoundException('Invalid or expired verification token');
 
-    // use Mongoose Document.set to avoid TypeScript property errors on the Document type
     user.set('isVerified', true);
     user.set('verificationToken', null);
     await user.save();
@@ -72,11 +71,8 @@ export class AuthService {
     const user = await this.userModel.findOne({ email });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    // read isVerified using Mongoose document accessor or cast to any to avoid TS errors
     const isVerified = (user as any).get ? (user as any).get('isVerified') : (user as any).isVerified;
-    if (!isVerified) {
-      throw new UnauthorizedException('Please verify your email first.');
-    }
+    if (!isVerified) throw new UnauthorizedException('Please verify your email first.');
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
@@ -110,6 +106,41 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
+  // === Forgot Password (Send Reset Email) ===
+  async requestPasswordReset(email: string) {
+    const user = await this.userModel.findOne({ email });
+    if (!user) throw new NotFoundException('User with this email does not exist');
+
+    const resetToken = randomBytes(32).toString('hex');
+    const resetTokenExpires = new Date(Date.now() + 1000 * 60 * 30); // 30 دقیقه اعتبار
+
+    user.set('resetPasswordToken', resetToken);
+    user.set('resetPasswordExpires', resetTokenExpires);
+    await user.save();
+
+    await this.sendResetPasswordEmail(user.email, resetToken);
+
+    return { message: 'Password reset email sent successfully' };
+  }
+
+  // === Reset Password (After verifying link) ===
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.userModel.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() },
+    });
+
+    if (!user) throw new BadRequestException('Invalid or expired reset token');
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.set('password', hashedPassword);
+    user.set('resetPasswordToken', null);
+    user.set('resetPasswordExpires', null);
+    await user.save();
+
+    return { message: 'Password reset successfully. You can now log in.' };
+  }
+
   // === Token Helpers ===
   private async generateTokens(userId: string, email: string) {
     const payload = { sub: userId, email };
@@ -125,27 +156,24 @@ export class AuthService {
 
   // === Send Verification Email ===
   private async sendVerificationEmail(email: string, token: string) {
-    // ⚙️ SMTP تنظیمات
     const transporter = nodemailer.createTransport({
-      service: 'gmail', // می‌تونی Mailtrap یا SMTP اختصاصی بذاری
+      service: 'gmail',
       auth: {
-        user: process.env.MAIL_USER, // آدرس ایمیل
-        pass: process.env.MAIL_PASS, // رمز عبور یا App Password
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
       },
     });
 
     const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-
     const mailOptions = {
       from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
       to: email,
       subject: 'Verify your FORTEN account',
       html: `
-        <div style="font-family: Arial, sans-serif; padding:20px; border-radius:8px; background:#f9f9f9">
+        <div style="font-family: Arial, sans-serif; padding:20px;">
           <h2>Welcome to FORTEN</h2>
-          <p>Hi 👋, please verify your email to activate your account.</p>
-          <a href="${verificationUrl}" style="background:#2ff1b4;color:#021510;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold;">Verify Email</a>
-          <p style="margin-top:20px;font-size:12px;color:#888;">If you didn't register, please ignore this email.</p>
+          <p>Please verify your email to activate your account:</p>
+          <a href="${verificationUrl}" style="background:#2ff1b4;padding:10px 20px;border-radius:5px;">Verify Email</a>
         </div>
       `,
     };
@@ -156,6 +184,40 @@ export class AuthService {
     } catch (error) {
       console.error('❌ Failed to send verification email:', error.message);
       throw new BadRequestException('Failed to send verification email');
+    }
+  }
+
+  // === Send Password Reset Email ===
+  private async sendResetPasswordEmail(email: string, token: string) {
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const mailOptions = {
+      from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject: 'Reset your FORTEN account password',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding:20px;">
+          <h2>Password Reset Request</h2>
+          <p>We received a request to reset your password.</p>
+          <a href="${resetUrl}" style="background:#ffb84d;padding:10px 20px;border-radius:5px;">Reset Password</a>
+          <p>If you didn’t request this, ignore this email.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`📧 Password reset email sent to ${email}`);
+    } catch (error) {
+      console.error('❌ Failed to send reset email:', error.message);
+      throw new BadRequestException('Failed to send password reset email');
     }
   }
 }
