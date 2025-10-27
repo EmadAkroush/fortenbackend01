@@ -1,58 +1,33 @@
-import {
-  Controller,
-  Post,
-  Get,
-  Param,
-  Body,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
 import { ReferralsService } from './referrals.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('referrals')
-@UseGuards(JwtAuthGuard) // تمام مسیرها نیازمند احراز هویت هستند
+@UseGuards(JwtAuthGuard)
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
-  // 📥 ثبت زیرمجموعه جدید (کاربر در پروفایل خودش لیدر را وارد می‌کند)
-  @Post('register')
-  async registerReferral(
-    @Req() req,
-    @Body() body: { referrerCode: string },
-  ) {
-    const userId = req.user.userId; // گرفتن آی‌دی کاربر از JWT
-    return this.referralsService.registerReferral(body.referrerCode, userId);
-  }
-
-  // 📊 دریافت لیست زیرمجموعه‌ها برای کاربر لاگین‌شده
+  // 📊 لیست زیرمجموعه‌ها
   @Get()
   async getUserReferrals(@Req() req) {
-    const userId = req.user.userId;
-    return this.referralsService.getUserReferrals(userId);
+    return this.referralsService.getUserReferrals(req.user.userId);
   }
 
-  // 🧮 آمار کلی زیرمجموعه‌ها (تعداد، مجموع سود، کل سرمایه‌گذاری)
+  // 📈 آمار کلی
   @Get('stats')
   async getReferralStats(@Req() req) {
-    const userId = req.user.userId;
-    return this.referralsService.getReferralStats(userId);
+    return this.referralsService.getReferralStats(req.user.userId);
   }
 
-  // 🔍 دریافت جزئیات هر نود (زیرمجموعه خاص)
+  // 🔍 جزئیات نود خاص
   @Get('node/:id')
   async getReferralNodeDetails(@Param('id') id: string) {
     return this.referralsService.getReferralNodeDetails(id);
   }
 
-  // 💰 اجرای دستی محاسبه سود ریفرال‌ها (برای تست یا ادمین)
-  @Post('calculate-profits')
-  async calculateReferralProfits() {
-    const result = await this.referralsService.calculateReferralProfits();
-    return {
-      success: true,
-      message: 'Referral profit calculation triggered successfully.',
-      result,
-    };
+  // 🧾 تاریخچه تراکنش‌های ریفرال برای داشبورد
+  @Get('transactions/my')
+  async getReferralTransactions(@Req() req) {
+    return this.referralsService.getReferralTransactions(req.user.userId);
   }
 }
