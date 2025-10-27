@@ -24,9 +24,9 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
-  // 🟡 Verify email via token
-  @Get('verify-email')
-  async verifyEmail(@Query('token') token: string) {
+  // 🟡 Verify email via token (from body instead of query)
+  @Post('verifyemail')
+  async verifyEmail(@Body('token') token: string) {
     return this.authService.verifyEmail(token);
   }
 

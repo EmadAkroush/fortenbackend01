@@ -58,6 +58,9 @@ export class User extends Document {
   @Prop({ default: null })
   refreshToken?: string; // هش شده‌ی رفرش‌توکن فعلی کاربر
 
+    @Prop({ default: null })
+  verificationToken?: string; // هش شده‌ی رفرش‌توکن فعلی کاربر
+
   // ===== Security =====
   @Prop({ default: false })
   twoFAEnabled: boolean;
@@ -74,6 +77,9 @@ export class User extends Document {
 
   @Prop({ default: true })
   isActive: boolean;
+
+    @Prop({ default: true })
+  isVerified: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
