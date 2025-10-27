@@ -5,6 +5,7 @@ import { Referral } from './schemas/referrals.schema';
 import { UsersService } from '../users/users.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as mongoose from 'mongoose';
+import { TransactionsService } from '../transactions/transactions.service'; // ✅ اضافه شد
 
 @Injectable()
 export class ReferralsService {
@@ -13,6 +14,7 @@ export class ReferralsService {
   constructor(
     @InjectModel(Referral.name) private referralModel: Model<Referral>,
     private readonly usersService: UsersService,
+    private readonly transactionsService: TransactionsService, // ✅ اضافه شد
   ) {}
 
   // 📥 ثبت زیرمجموعه جدید (در ثبت‌نام یا پروفایل)
@@ -145,6 +147,17 @@ export class ReferralsService {
         const reward = dailyProfit * percentage;
         if (reward > 0) {
           await this.addReferralProfit(referrer._id.toString(), reward, user._id.toString());
+
+          // ✅ ثبت تراکنش در بخش تراکنش‌ها
+          await this.transactionsService.createTransaction({
+            userId: referrer._id.toString(),
+            type: 'referral-profit',
+            amount: reward,
+            currency: 'USD',
+            status: 'completed',
+            note: `Referral level ${level} profit from ${user.email}`,
+          });
+
           this.logger.log(
             `💰 Level ${level} referral profit: +${reward.toFixed(2)} USD to ${referrer.email} from ${user.email}`,
           );
