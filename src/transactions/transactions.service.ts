@@ -84,4 +84,12 @@ export class TransactionsService {
 
     return await tx.save();
   }
+
+  async findByTypeAndDate(type: string, since: Date) {
+  return await this.transactionModel.find({
+    type,
+    createdAt: { $gte: since },
+  });
+}
+
 }

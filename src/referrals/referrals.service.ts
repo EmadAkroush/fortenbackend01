@@ -114,52 +114,58 @@ export class ReferralsService {
     }));
   }
 
-  // 🔁 کرون جاب محاسبه سود ریفرال تا ۳ سطح
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async calculateReferralProfits() {
-    this.logger.log('🔁 Running daily referral profit calculation...');
+@Cron('30 1 * * *')
+async calculateReferralProfits() {
+  this.logger.log('🔁 Running daily referral profit calculation (corrected)...');
 
-    const allUsers = await this.usersService.findAll();
+  // دریافت تراکنش‌های سود روز گذشته
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const profitTransactions = await this.transactionsService.findByTypeAndDate('profit', since);
 
-    for (const user of allUsers) {
-      if (!user.referredBy) continue;
+  for (const tx of profitTransactions) {
+    const userId = tx.userId.toString();
+    const user = await this.usersService.findById(userId);
+    if (!user || !user.referredBy) continue;
 
-      const dailyProfit = user.profitBalance * 0.01; // فرض: سود روزانه ۱٪
-      let currentReferrerCode = user.referredBy;
-      let level = 1;
+    const profitAmount = tx.amount; // سودی که از این سرمایه‌گذاری تولید شده
+    let currentReferrerCode = user.referredBy;
+    let level = 1;
 
-      while (currentReferrerCode && level <= 3) {
-        const referrer = await this.usersService.findByVxCode(currentReferrerCode);
-        if (!referrer) break;
+    // تا سه سطح بالا
+    while (currentReferrerCode && level <= 3) {
+      const referrer = await this.usersService.findByVxCode(currentReferrerCode);
+      if (!referrer) break;
 
-        let percentage = level === 1 ? 0.15 : level === 2 ? 0.1 : 0.05;
-        const reward = dailyProfit * percentage;
+      let percentage = level === 1 ? 0.15 : level === 2 ? 0.1 : 0.05;
+      const reward = profitAmount * percentage;
 
-        if (reward > 0) {
-          await this.addReferralProfit(referrer._id.toString(), reward, user._id.toString());
+      if (reward > 0) {
+        await this.addReferralProfit(referrer._id.toString(), reward, user._id.toString());
 
-          // ✅ ثبت تراکنش با جزئیات سطح — اطلاعات اضافی را به صورت JSON در فیلد note قرار می‌دهیم
-          await this.transactionsService.createTransaction({
-            userId: referrer._id.toString(),
-            type: 'referral-profit',
-            amount: reward,
-            currency: 'USD',
-            status: 'completed',
-            note: `Referral profit (Level ${level}) from ${user.email} | extra: ${JSON.stringify({ level, fromUser: user.email })}`,
-          });
+        // ثبت تراکنش ریفرال
+        await this.transactionsService.createTransaction({
+          userId: referrer._id.toString(),
+          type: 'referral-profit',
+          amount: reward,
+          currency: 'USD',
+          status: 'completed',
+          note: `Referral profit (Level ${level}) from ${user.email} | source: profit ${profitAmount}`,
+        });
 
-          this.logger.log(
-            `💰 Level ${level} referral profit: +${reward.toFixed(2)} USD to ${referrer.email} from ${user.email}`,
-          );
-        }
-
-        currentReferrerCode = referrer.referredBy;
-        level++;
+        this.logger.log(
+          `💰 Level ${level} referral profit: +${reward.toFixed(
+            2,
+          )} USD to ${referrer.email} from ${user.email}`,
+        );
       }
-    }
 
-    this.logger.log('✅ Referral profit distribution (3 levels) completed');
+      currentReferrerCode = referrer.referredBy;
+      level++;
+    }
   }
+
+  this.logger.log('✅ Referral profit distribution completed successfully (based on daily profits only).');
+}
 
   // 🧾 گرفتن تراکنش‌های ریفرال کاربر برای داشبورد
   async getReferralTransactions(userId: string) {
