@@ -43,7 +43,6 @@ export class AuthService {
       verificationToken,
     });
 
-    // ارسال ایمیل تأیید
     await this.sendVerificationEmail(user.email, verificationToken);
 
     const userId = user._id.toString();
@@ -73,7 +72,7 @@ export class AuthService {
     const user = await this.userModel.findOne({ email });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const isVerified = (user as any).get ? (user as any).get('isVerified') : (user as any).isVerified;
+    const isVerified = (user as any).isVerified;
     if (!isVerified) throw new UnauthorizedException('Please verify your email first.');
 
     const valid = await bcrypt.compare(password, user.password);
@@ -95,9 +94,8 @@ export class AuthService {
     const isMatch = await bcrypt.compare(refreshToken, user.refreshToken);
     if (!isMatch) throw new UnauthorizedException('Token mismatch');
 
-    const userIds = user._id.toString();
-    const tokens = await this.generateTokens(userIds, user.email);
-    await this.updateRefreshToken(userIds, tokens.refreshToken);
+    const tokens = await this.generateTokens(userId, user.email);
+    await this.updateRefreshToken(userId, tokens.refreshToken);
 
     return tokens;
   }
@@ -120,12 +118,27 @@ export class AuthService {
     user.set('resetPasswordExpires', resetTokenExpires);
     await user.save();
 
-    await this.sendResetPasswordEmail(user.email, resetToken);
+    await this.sendResetPasswordEmail(user.email, resetToken, user.firstName);
 
     return { message: 'Password reset email sent successfully' };
   }
 
-  // === Reset Password (After verifying link) ===
+  // === Verify Reset Token ===
+  async verifyResetToken(token: string) {
+    const user = await this.userModel.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() },
+    });
+
+    if (!user) throw new BadRequestException('Invalid or expired reset token');
+
+    return {
+      message: 'Reset token is valid',
+      email: user.email,
+    };
+  }
+
+  // === Reset Password ===
   async resetPassword(token: string, newPassword: string) {
     const user = await this.userModel.findOne({
       resetPasswordToken: token,
@@ -190,66 +203,29 @@ export class AuthService {
   }
 
   // === Send Password Reset Email ===
-  // private async sendResetPasswordEmail(email: string, token: string) {
-  //   const transporter = nodemailer.createTransport({
-  //     service: 'gmail',
-  //     auth: {
-  //       user: process.env.MAIL_USER,
-  //       pass: process.env.MAIL_PASS,
-  //     },
-  //   });
-
-    
-
-  //   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-  //   const mailOptions = {
-  //     from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
-  //     to: email,
-  //     subject: 'Reset your FORTEN account password',
-  //     html: `
-  //       <div style="font-family: Arial, sans-serif; padding:20px;">
-  //         <h2>Password Reset Request</h2>
-  //         <p>We received a request to reset your password.</p>
-  //         <a href="${resetUrl}" style="background:#ffb84d;padding:10px 20px;border-radius:5px;">Reset Password</a>
-  //         <p>If you didn’t request this, ignore this email.</p>
-  //       </div>
-  //     `,
-  //   };
-
-  //   try {
-  //     await transporter.sendMail(mailOptions);
-  //     console.log(`📧 Password reset email sent to ${email}`);
-  //   } catch (error) {
-  //     console.error('❌ Failed to send reset email:', error.message);
-  //     throw new BadRequestException('Failed to send password reset email');
-  //   }
-  // }
   private async sendResetPasswordEmail(email: string, token: string, firstName?: string) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.MAIL_USER,
-      pass: process.env.MAIL_PASS,
-    },
-  });
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
+      },
+    });
 
-  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-  
-  // 📄 مسیر فایل HTML
-  const templatePath = path.resolve(__dirname, '../templates/reset-password-email.html');
-  
-  // 📖 خوندن محتوای HTML
-  let html = fs.readFileSync(templatePath, 'utf8')
-    .replace(/{{resetUrl}}/g, resetUrl)
-    .replace(/{{firstName \|\| 'کاربر'}}/g, firstName || 'کاربر');
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const templatePath = path.resolve(__dirname, '../templates/reset-password-email.html');
 
-  const mailOptions = {
-    from: `"Forten Support" <${process.env.MAIL_USER}>`,
-    to: email,
-    subject: 'بازیابی رمز عبور — Forten',
-    html,
-  };
+    let html = fs.readFileSync(templatePath, 'utf8')
+      .replace(/{{resetUrl}}/g, resetUrl)
+      .replace(/{{firstName \|\| 'کاربر'}}/g, firstName || 'کاربر');
 
-  await transporter.sendMail(mailOptions);
-}
+    const mailOptions = {
+      from: `"Forten Support" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject: 'بازیابی رمز عبور — Forten',
+      html,
+    };
+
+    await transporter.sendMail(mailOptions);
+  }
 }
