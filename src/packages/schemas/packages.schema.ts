@@ -19,7 +19,11 @@ export class Package extends Document {
   maxDeposit: number; // حداکثر مبلغ سرمایه‌گذاری
 
   @Prop({ default: 0 })
-  referralBonus: number; // درصد پاداش زیرمجموعه برای این پکیج
+  upgradeRate: number; 
+
+  
+  @Prop({ default: '' })
+  referralRequirement: string; // توضیحات
 
   @Prop({ default: '' })
   description: string; // توضیحات
