@@ -37,9 +37,10 @@ export class AuthController {
   }
 
   // 🟠 Refresh JWT tokens
-  @Post('refresh')
-  async refresh(@Body() body: { userId: string; refreshToken: string }) {
-    return this.authService.refresh(body.userId, body.refreshToken);
+  @Get('refresh')
+  async refresh(@Req() req: Request) {
+    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+    return this.authService.refresh(authHeader as string);
   }
 
   // 🔴 Logout (requires valid JWT)

@@ -86,18 +86,50 @@ export class AuthService {
   }
 
   // === Refresh Token ===
-  async refresh(userId: string, refreshToken: string) {
-    const user = await this.userModel.findById(userId);
-    if (!user || !user.refreshToken)
-      throw new UnauthorizedException('Invalid token');
+ async refresh(authHeader: string) {
+    // 🧩 بررسی وجود هدر
+    if (!authHeader || !authHeader.startsWith('Bearer '))
+      throw new UnauthorizedException('Missing or invalid Authorization header');
 
+    const refreshToken = authHeader.split(' ')[1];
+    if (!refreshToken) throw new UnauthorizedException('Refresh token not found');
+
+    // 🧠 بررسی اعتبار JWT
+    let decoded: any;
+    try {
+      decoded = this.jwtService.verify(refreshToken);
+    } catch (err) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    // 🔎 پیدا کردن کاربر
+    const user = await this.userModel.findById(decoded.sub);
+    if (!user || !user.refreshToken)
+      throw new UnauthorizedException('User not found or token missing');
+
+    // 🔐 تطبیق refreshToken با دیتابیس
     const isMatch = await bcrypt.compare(refreshToken, user.refreshToken);
     if (!isMatch) throw new UnauthorizedException('Token mismatch');
 
-    const tokens = await this.generateTokens(userId, user.email);
-    await this.updateRefreshToken(userId, tokens.refreshToken);
+    // 🎟 تولید توکن جدید
+    const tokens = await this.generateTokens(user._id.toString(), user.email);
 
-    return tokens;
+    // 📦 آپدیت رفرش توکن در دیتابیس
+    await this.updateRefreshToken(user._id.toString(), tokens.refreshToken);
+
+    // ✅ بازگشت توکن جدید + اطلاعات کاربر
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        vxCode: user.vxCode,
+        isVerified: user.isVerified,
+      },
+    };
   }
 
   // === Logout ===
