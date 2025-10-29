@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ActivityService } from './activity.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -10,30 +10,24 @@ export class ActivityController {
   // 🔹 انتقال از profitBalance به mainBalance
   @Post('transfer-profit')
   async transferProfitToMain(
-    @Req() req,
-    @Body() body: { amount: number },
+    @Body() body: { userId: string; amount: number },
   ) {
-    const userId = req.user.userId || req.user.sub;
-    return this.activityService.transferProfitToMain(userId, body.amount);
+    return this.activityService.transferProfitToMain(body.userId, body.amount);
   }
 
   // 🔹 انتقال از referralProfit به mainBalance
   @Post('transfer-referral')
   async transferReferralToMain(
-    @Req() req,
-    @Body() body: { amount: number },
+    @Body() body: { userId: string; amount: number },
   ) {
-    const userId = req.user.userId || req.user.sub;
-    return this.activityService.transferReferralToMain(userId, body.amount);
+    return this.activityService.transferReferralToMain(body.userId, body.amount);
   }
 
   // 🔹 انتقال از bonusBalance به mainBalance
   @Post('transfer-bonus')
   async transferBonusToMain(
-    @Req() req,
-    @Body() body: { amount: number },
+    @Body() body: { userId: string; amount: number },
   ) {
-    const userId = req.user.userId || req.user.sub;
-    return this.activityService.transferBonusToMain(userId, body.amount);
+    return this.activityService.transferBonusToMain(body.userId, body.amount);
   }
 }
