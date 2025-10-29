@@ -72,7 +72,7 @@ export class ReferralsService {
       { referrer: referrerId, referredUser: fromUserId },
       { $inc: { profitEarned: amount } },
     );
-    await this.usersService.addBalance(referrerId, 'referralProfit', amount);
+    await this.usersService.addBalance(referrerId, 'referralBalance', amount);
   }
 
   // 📈 آمار کلی زیرمجموعه‌ها

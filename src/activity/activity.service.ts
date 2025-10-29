@@ -43,14 +43,14 @@ export class ActivityService {
     };
   }
 
-  // 🟣 انتقال از referralProfit → mainBalance
+  // 🟣 انتقال از referralBalance → mainBalance
   async transferReferralToMain(userId: string, amount: number) {
     const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
-    if (user.referralProfit < amount)
+    if (user.referralBalance < amount)
       throw new BadRequestException('Insufficient referral profit balance');
 
-    user.referralProfit -= amount;
+    user.referralBalance -= amount;
     user.mainBalance += amount;
     await user.save();
 
@@ -69,7 +69,7 @@ export class ActivityService {
       message: `✅ ${amount} USD transferred from Referral Profit to Main Balance.`,
       balances: {
         mainBalance: user.mainBalance,
-        referralProfit: user.referralProfit,
+        referralBalance: user.referralBalance,
       },
     };
   }

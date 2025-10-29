@@ -6,10 +6,12 @@ import { User } from './schemas/user.schema';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+
   @Post()
   create(@Body() body: Partial<User>) {
     return this.usersService.create(body);
   }
+
 
   @Get()
   findAll() {
@@ -26,9 +28,20 @@ export class UsersController {
     return this.usersService.updateUser(id, body);
   }
 
+    // 🟢 دریافت موجودی حساب‌های کاربر
+  @Post('balances')
+  async getUserBalances(@Body() body: { userId: string }) {
+    return this.usersService.getUserBalances(body.userId);
+  }
+
+
+
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.usersService.deleteUser(id);
   }
+
+
 }
 

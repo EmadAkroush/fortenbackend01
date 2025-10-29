@@ -50,7 +50,7 @@ export class User extends Document {
   profitBalance: number;
 
   @Prop({ type: Number, default: 0 })
-  referralProfit: number;
+  referralBalance: number;
 
   @Prop({ type: Number, default: 0 })
   bonusBalance: number;

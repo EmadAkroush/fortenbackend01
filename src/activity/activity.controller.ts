@@ -8,15 +8,15 @@ export class ActivityController {
   constructor(private readonly activityService: ActivityService) {}
 
   // 🔹 انتقال از profitBalance به mainBalance
-  @Post('transfer-profit')
+  @Post('transferprofit')
   async transferProfitToMain(
     @Body() body: { userId: string; amount: number },
   ) {
     return this.activityService.transferProfitToMain(body.userId, body.amount);
   }
 
-  // 🔹 انتقال از referralProfit به mainBalance
-  @Post('transfer-referral')
+  // 🔹 انتقال از referralBalance به mainBalance
+  @Post('transferreferral')
   async transferReferralToMain(
     @Body() body: { userId: string; amount: number },
   ) {
@@ -24,7 +24,7 @@ export class ActivityController {
   }
 
   // 🔹 انتقال از bonusBalance به mainBalance
-  @Post('transfer-bonus')
+  @Post('transferbonus')
   async transferBonusToMain(
     @Body() body: { userId: string; amount: number },
   ) {

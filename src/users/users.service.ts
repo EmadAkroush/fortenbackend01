@@ -50,7 +50,7 @@ export class UsersService {
   // 💰 افزودن مبلغ به یکی از حساب‌ها
   async addBalance(
     userId: string,
-    type: 'mainBalance' | 'profitBalance' | 'referralProfit' | 'bonusBalance',
+    type: 'mainBalance' | 'profitBalance' | 'referralBalance' | 'bonusBalance',
     amount: number,
   ) {
     const user = await this.findById(userId);
@@ -74,7 +74,7 @@ export class UsersService {
     return {
       mainBalance: user.mainBalance ?? 0,
       profitBalance: user.profitBalance ?? 0,
-      referralProfit: user.referralProfit ?? 0,
+      referralBalance: user.referralBalance ?? 0,
       bonusBalance: user.bonusBalance ?? 0,
     };
   }
