@@ -65,4 +65,17 @@ export class UsersService {
   async deleteUser(id: string) {
     return this.userModel.findByIdAndDelete(id);
   }
+
+  // 🟢 دریافت موجودی‌های حساب کاربر
+  async getUserBalances(userId: string) {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    return {
+      mainBalance: user.mainBalance ?? 0,
+      profitBalance: user.profitBalance ?? 0,
+      referralProfit: user.referralProfit ?? 0,
+      bonusBalance: user.bonusBalance ?? 0,
+    };
+  }
 }
