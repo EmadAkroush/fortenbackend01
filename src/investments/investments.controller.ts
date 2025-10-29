@@ -20,7 +20,7 @@ export class InvestmentsController {
   // 🟢 ایجاد یا ارتقای سرمایه‌گذاری
   @Post()
   async createOrUpgrade(@Req() req, @Body() dto: CreateInvestmentDto) {
-    const userId = req.user.userId;
+    const { userId } = dto;
     return this.investmentsService.createInvestment({ ...dto, user: userId });
   }
 

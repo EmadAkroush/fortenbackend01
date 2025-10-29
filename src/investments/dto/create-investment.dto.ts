@@ -3,6 +3,9 @@ import { IsMongoId, IsNumber, IsOptional, IsString } from 'class-validator';
 export class CreateInvestmentDto {
   @IsMongoId()
   user: string;
+  
+    @IsMongoId()
+  userId: string;
 
   @IsMongoId()
   package: string;
