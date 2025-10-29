@@ -12,6 +12,8 @@ export class Payment extends Document {
   @Prop({ default: 'TRX' })
   currency: string;
 
+
+
   @Prop({ required: true })
   paymentId: string;
 
@@ -20,6 +22,10 @@ export class Payment extends Document {
 
   @Prop()
   payAddress?: string;
+
+  
+  @Prop()
+  payCurrency?: string;
 
   @Prop()
   payAmount?: number;

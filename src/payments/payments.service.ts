@@ -20,18 +20,25 @@ export class PaymentsService {
     private readonly bonusesService: BonusesService, // 👈 اضافه شد
   ) {}
 
-  // 🟢 ایجاد پرداخت TRX جدید
-  async createTrxPayment(userId: string, amountUsd: number) {
+  // 🟢 ایجاد پرداخت جدید با انتخاب شبکه (TRX, BTC, USDT, ...)
+  async createTrxPayment(userId: string, amountUsd: number, network: string ) {
     try {
       const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
       const appUrl = this.config.get('APP_URL');
 
+      // 🧩 اعتبارسنجی شبکه ورودی
+      const supportedNetworks = ['TRX', 'BTC', 'ETH', 'USDT', 'BNB', 'LTC'];
+      if (!supportedNetworks.includes(network.toUpperCase())) {
+        throw new Error(`Unsupported payment network: ${network}`);
+      }
+
+      // 🟢 ایجاد درخواست در NowPayments
       const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
           price_amount: amountUsd,
           price_currency: 'USD',
-          pay_currency: 'TRX',
+          pay_currency: network.toUpperCase(),
           order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
         },
@@ -41,19 +48,20 @@ export class PaymentsService {
       );
 
       const payment = await this.paymentModel.create({
-        userId, // ✅ ذخیره آیدی کاربر
+        userId,
         paymentId: response.data.payment_id,
         status: response.data.payment_status,
         amount: amountUsd,
         currency: 'USD',
-        payCurrency: 'TRX',
+        payCurrency: network.toUpperCase(),
         payAddress: response.data.pay_address,
       });
 
       return {
         message: 'Payment created successfully',
         paymentId: payment.paymentId,
-        payAddress: response.data.pay_address, // ✅ آدرس پرداخت برای نمایش به کاربر
+        payAddress: response.data.pay_address,
+        payCurrency: network.toUpperCase(),
       };
     } catch (error) {
       this.logger.error('Error creating payment', error);
@@ -81,7 +89,7 @@ export class PaymentsService {
         amount: payment.amount,
         currency: 'USD',
         status: 'completed',
-        note: `Deposit confirmed via NOWPayments (TRX) #${payment.paymentId}`,
+        note: `Deposit confirmed via NOWPayments (${payment.payCurrency}) #${payment.paymentId}`,
       });
 
       // 🔹 افزایش موجودی حساب اصلی
@@ -114,7 +122,7 @@ export class PaymentsService {
         amount: payment.amount,
         currency: 'USD',
         status: 'failed',
-        note: `Deposit failed via NOWPayments (TRX) #${payment.paymentId} | Status: ${data.payment_status}`,
+        note: `Deposit failed via NOWPayments (${payment.payCurrency}) #${payment.paymentId} | Status: ${data.payment_status}`,
       });
 
       this.logger.warn(
