@@ -17,9 +17,10 @@ export class TransactionsController {
 
   // 🔹 دریافت لیست تراکنش‌های کاربر
   @UseGuards(JwtAuthGuard)
-  @Get('my')
-  async getUserTransactions(@Req() req) {
-    const userId = req.user.sub;
+  @Post('my')
+  async getUserTransactions(@Body() body: { userId: string }) {
+    const userId = body.userId;
+    if (!userId) throw new BadRequestException('User ID is required');
     return this.transactionsService.getUserTransactions(userId);
   }
 
@@ -35,13 +36,19 @@ export class TransactionsController {
   // 🔹 ایجاد تراکنش جدید (مثلاً توسط مدیر یا برای تست)
   @UseGuards(JwtAuthGuard)
   @Post('create')
-  async createTransaction(@Req() req, @Body() body: {
-    type: string;
-    amount: number;
-    currency?: string;
-    note?: string;
-  }) {
-    const userId = req.user.sub;
+  async createTransaction(
+    @Body()
+    body: {
+      userId: string;
+      type: string;
+      amount: number;
+      currency?: string;
+      note?: string;
+    },
+  ) {
+    const userId = body.userId;
+    if (!userId) throw new BadRequestException('User ID is required');
+
     return this.transactionsService.createTransaction({
       userId,
       type: body.type,
@@ -55,8 +62,9 @@ export class TransactionsController {
   // 🔹 درخواست برداشت از حساب (10٪ کارمزد)
   @UseGuards(JwtAuthGuard)
   @Post('withdraw')
-  async requestWithdrawal(@Req() req, @Body() body: { amount: number }) {
-    const userId = req.user.sub;
+  async requestWithdrawal(@Body() body: { userId: string; amount: number }) {
+    const userId = body.userId;
+    if (!userId) throw new BadRequestException('User ID is required');
     if (!body.amount || body.amount <= 0) {
       throw new BadRequestException('Invalid withdrawal amount');
     }
