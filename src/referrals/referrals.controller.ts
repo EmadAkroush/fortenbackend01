@@ -7,6 +7,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
+    // 📥 ثبت زیرمجموعه جدید
+  @Post('register')
+  async registerReferral(
+    @Body('referrerCode') referrerCode: string,
+    @Body('newUserId') newUserId: string,
+  ) {
+    return this.referralsService.registerReferral(referrerCode, newUserId);
+  }
+
   // 📊 لیست زیرمجموعه‌ها
   @Post()
   async getUserReferrals(@Body('userId') userId: string) {
