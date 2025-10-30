@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { ReferralsService } from './referrals.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -8,26 +8,26 @@ export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
   // 📊 لیست زیرمجموعه‌ها
-  @Get()
-  async getUserReferrals(@Req() req) {
-    return this.referralsService.getUserReferrals(req.user.userId);
+  @Post()
+  async getUserReferrals(@Body('userId') userId: string) {
+    return this.referralsService.getUserReferrals(userId);
   }
 
   // 📈 آمار کلی
-  @Get('stats')
-  async getReferralStats(@Req() req) {
-    return this.referralsService.getReferralStats(req.user.userId);
+  @Post('stats')
+  async getReferralStats(@Body('userId') userId: string) {
+    return this.referralsService.getReferralStats(userId);
   }
 
   // 🔍 جزئیات نود خاص
-  @Get('node/:id')
-  async getReferralNodeDetails(@Param('id') id: string) {
-    return this.referralsService.getReferralNodeDetails(id);
+  @Post('node')
+  async getReferralNodeDetails(@Body('userId') userId: string) {
+    return this.referralsService.getReferralNodeDetails(userId);
   }
 
   // 🧾 تاریخچه تراکنش‌های ریفرال برای داشبورد
-  @Get('transactions/my')
-  async getReferralTransactions(@Req() req) {
-    return this.referralsService.getReferralTransactions(req.user.userId);
+  @Post('transactions/my')
+  async getReferralTransactions(@Body('userId') userId: string) {
+    return this.referralsService.getReferralTransactions(userId);
   }
 }
