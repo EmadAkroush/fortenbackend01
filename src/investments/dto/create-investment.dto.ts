@@ -1,12 +1,14 @@
 import { IsMongoId, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateInvestmentDto {
+   @IsOptional()
   @IsMongoId()
   user: string;
   
-    @IsMongoId()
+  @IsMongoId()
   userId: string;
-
+  
+   @IsOptional()
   @IsMongoId()
   package: string;
 
