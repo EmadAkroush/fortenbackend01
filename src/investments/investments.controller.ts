@@ -25,16 +25,22 @@ export class InvestmentsController {
   }
 
   // 🟣 لیست سرمایه‌گذاری‌های کاربر لاگین‌شده
-  @Get('my')
-  async getMyInvestments(@Req() req) {
-    const userId = req.user.userId;
-    return this.investmentsService.getUserInvestments(userId);
+// 🟢 دریافت سرمایه‌گذاری‌های کاربر (نسخه کاربر)
+  @Post('my')
+  async getMyInvestments(@Body() body: { userId: string }) {
+    return this.investmentsService.getUserInvestments(body.userId);
   }
 
   // 🟢 لیست سرمایه‌گذاری‌های هر کاربر (برای ادمین)
-  @Get('user/:userId')
-  async getUserInvestments(@Param('userId') userId: string) {
-    return this.investmentsService.getUserInvestments(userId);
+  @Post('user')
+  async getUserInvestments(@Body() body: { userId: string }) {
+    return this.investmentsService.getUserInvestments(body.userId);
+  }
+
+  // 🔴 لغو سرمایه‌گذاری و بازگشت وجه
+  @Post('cancel')
+  async cancel(@Body() body: { investmentId: string; }) {
+    return this.investmentsService.cancelInvestment(body.investmentId);
   }
 
   // 🟠 اجرای دستی محاسبه سود روزانه
@@ -43,9 +49,5 @@ export class InvestmentsController {
     return this.investmentsService.calculateDailyProfits();
   }
 
-  // 🔴 لغو سرمایه‌گذاری و بازگشت وجه
-  @Delete(':id')
-  async cancel(@Param('id') id: string) {
-    return this.investmentsService.cancelInvestment(id);
-  }
+
 }
