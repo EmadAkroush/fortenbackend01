@@ -4,8 +4,8 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types , Document } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose'; 
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Investment } from './schemas/investments.schema';
 import { CreateInvestmentDto } from './dto/create-investment.dto';
@@ -21,11 +21,17 @@ export class InvestmentsService {
     @InjectModel(Investment.name) private investmentModel: Model<Investment>,
     @InjectModel(User.name) private userModel: Model<User>,
     @InjectModel(Package.name) private packageModel: Model<Package>,
+    @InjectConnection() private readonly connection: Connection, // ✅ اضافه شد
     private readonly transactionsService: TransactionsService,
   ) {}
 
-  // 🟢 ایجاد یا ارتقا سرمایه‌گذاری
-  async createInvestment(dto: CreateInvestmentDto) {
+  // 🟢 ایجاد یا ارتقا سرمایه‌گذاری با لاگ خطا و ارتقای هوشمند
+// 🟢 ایجاد یا ارتقا سرمایه‌گذاری با کنترل خطا و پشتیبانی از Transaction در صورت فعال بودن Replica Set
+// 🟢 ایجاد یا ارتقا سرمایه‌گذاری با کنترل خطا و پشتیبانی از Transaction در صورت فعال بودن Replica Set
+// 🟢 ایجاد یا ارتقا سرمایه‌گذاری
+// 🟢 ایجاد یا ارتقا سرمایه‌گذاری
+async createInvestment(dto: CreateInvestmentDto) {
+  try {
     const user = await this.userModel.findById(dto.user);
     if (!user) throw new NotFoundException('User not found');
 
@@ -40,58 +46,80 @@ export class InvestmentsService {
       status: 'active',
     });
 
-    if (user.mainBalance < dto.amount) {
+    const depositAmount = Number(dto.amount);
+    if (isNaN(depositAmount) || depositAmount <= 0) {
+      throw new BadRequestException('Invalid investment amount');
+    }
+
+    if (user.mainBalance < depositAmount) {
       throw new BadRequestException('Insufficient balance');
     }
 
-    // کسر از حساب اصلی
-    user.mainBalance -= dto.amount;
+    // 📉 کسر از حساب اصلی
+    user.mainBalance -= depositAmount;
     await user.save();
 
-    if (investment) {
-      // 🔼 اگر کاربر از قبل سرمایه‌گذاری دارد → سرمایه را افزایش بده
-      investment.amount += dto.amount;
+    // 🧾 ثبت لاگ اولیه تراکنش
+    await this.transactionsService.createTransaction({
+      userId: user._id.toString(),
+      type: investment ? 'investment-upgrade-init' : 'investment-init',
+      amount: depositAmount,
+      currency: 'USD',
+      status: 'pending',
+      note: 'Investment process started',
+    });
 
-      // بررسی آیا باید به پکیج بالاتر ارتقا داده شود؟
-      const newPackage = packages.find(
+    if (investment) {
+      // 🟢 افزایش سرمایه
+      investment.amount = Number(investment.amount) + depositAmount;
+      const totalAmount = Number(investment.amount);
+
+      // 📦 پیدا کردن پکیج جدید مناسب
+      let newPackage = packages.find(
         (p) =>
-          investment.amount >= p.minDeposit && investment.amount <= p.maxDeposit,
+          totalAmount >= Number(p.minDeposit) &&
+          totalAmount <= Number(p.maxDeposit),
       );
+
+      // اگر از محدوده بالاتر بود، آخرین پکیج رو بگیر
+      if (!newPackage && totalAmount > Number(packages[packages.length - 1].maxDeposit)) {
+        newPackage = packages[packages.length - 1];
+      }
 
       if (!newPackage)
         throw new BadRequestException('No matching package found for new total');
 
-      // اگر پکیج جدید سطح بالاتری دارد → ارتقا بده
+      // ارتقا پکیج در صورت نیاز
       if (investment.package.toString() !== newPackage._id.toString()) {
-        // investment.package = newPackage._id;
-        // investment.package = new Types.ObjectId(newPackage._id);
-        investment.package = new Types.ObjectId(String(newPackage._id));
-
-
+        // Cast the package id to Types.ObjectId to satisfy TS types
+        investment.package = newPackage._id as unknown as Types.ObjectId;
         investment.dailyRate = newPackage.dailyRate;
-        this.logger.log(
-          `⬆️ User ${user.email} upgraded to ${newPackage.name} package.`,
-        );
+        this.logger.log(`⬆️ User ${user.email} upgraded to ${newPackage.name} package`);
       }
 
       await investment.save();
 
-      // ثبت تراکنش افزایش سرمایه
+      // ✅ ثبت تراکنش موفق
       await this.transactionsService.createTransaction({
         userId: user._id.toString(),
         type: 'investment-upgrade',
-        amount: dto.amount,
+        amount: depositAmount,
         currency: 'USD',
         status: 'completed',
         note: `Increased investment and upgraded to ${newPackage.name}`,
       });
 
-      return investment;
+      return {
+        success: true,
+        message: `Investment updated successfully. Current package: ${newPackage.name}`,
+        investment,
+      };
     } else {
       // 🟢 اگر اولین بار است → پکیج مناسب را پیدا کن
       const selectedPackage = packages.find(
-        (p) => dto.amount >= p.minDeposit && dto.amount <= p.maxDeposit,
+        (p) => depositAmount >= Number(p.minDeposit) && depositAmount <= Number(p.maxDeposit),
       );
+
       if (!selectedPackage)
         throw new BadRequestException('No matching package for this amount');
 
@@ -99,26 +127,63 @@ export class InvestmentsService {
       investment = new this.investmentModel({
         user: user._id,
         package: selectedPackage._id,
-        amount: dto.amount,
+        amount: depositAmount,
         dailyRate: selectedPackage.dailyRate,
         requiredReferrals: 3,
+        status: 'active',
       });
 
       const saved = await investment.save();
 
-      // ثبت تراکنش شروع
+      // ✅ ثبت تراکنش شروع
       await this.transactionsService.createTransaction({
         userId: user._id.toString(),
         type: 'investment',
-        amount: dto.amount,
+        amount: depositAmount,
         currency: 'USD',
         status: 'completed',
         note: `Started investment in ${selectedPackage.name}`,
       });
 
-      return saved;
+      return {
+        success: true,
+        message: `Investment started successfully in ${selectedPackage.name} package.`,
+        investment: saved,
+      };
     }
+  } catch (error) {
+    this.logger.error('❌ Investment creation failed:', error);
+
+    // 🧾 ثبت لاگ خطا (اگر کاربر شناخته شده بود)
+    if (dto?.user) {
+      await this.transactionsService.createTransaction({
+        userId: dto.user,
+        type: 'investment-error',
+        amount: Number(dto.amount) || 0,
+        currency: 'USD',
+        status: 'failed',
+        note: `Investment failed: ${error.message || 'Unknown error'}`,
+      });
+    }
+
+    // بازگرداندن پول به حساب کاربر در صورت خطا
+    if (dto?.user) {
+      const user = await this.userModel.findById(dto.user);
+      if (user) {
+        user.mainBalance += Number(dto.amount) || 0;
+        await user.save();
+        this.logger.warn(`💰 Refunded ${dto.amount} USD to ${user.email}`);
+      }
+    }
+
+    throw new BadRequestException(error.message || 'Investment operation failed');
   }
+}
+
+
+
+
+
 
   // 🟣 لیست سرمایه‌گذاری‌ها
   async getUserInvestments(userId: string) {
