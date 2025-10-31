@@ -38,14 +38,28 @@ export class UsersService {
     return this.userModel.find().select('-password').exec();
   }
 
-  // ✏️ آپدیت اطلاعات کاربر
-  async updateUser(id: string, data: Partial<User>): Promise<User> {
-    const user = await this.userModel.findByIdAndUpdate(id, data, {
-      new: true,
-    });
-    if (!user) throw new NotFoundException('User not found');
-    return user;
+async updateUser(userId: string, data: Partial<User>): Promise<User> {
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid update data provided');
   }
+
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([_, v]) => v !== undefined && v !== null)
+  );
+
+  const user = await this.userModel.findById(userId);
+  if (!user) throw new NotFoundException('User not found');
+
+  // فقط فیلدهایی که تغییر کرده‌اند را آپدیت کن
+  Object.assign(user, cleanData);
+
+  // ذخیره با ولیدیشن روی همان فیلدها
+  await user.save({ validateModifiedOnly: true });
+
+  return user;
+}
+
+
 
   // 💰 افزودن مبلغ به یکی از حساب‌ها
   async addBalance(

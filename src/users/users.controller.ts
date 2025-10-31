@@ -34,12 +34,13 @@ export class UsersController {
     return this.usersService.findById(userId);
   }
 
-  // 🟢 به‌روزرسانی کاربر با آیدی از بادی
-  @Post('update')
-  update(@Body() body: { userId: string; data: Partial<User> }) {
-    return this.usersService.updateUser(body.userId, body.data);
-  }
+@Post('update')
+async update(@Body() body: any) {
+  const { userId, ...updateData } = body;
 
+
+  return this.usersService.updateUser(userId, updateData);
+}
   // 🟢 دریافت موجودی حساب‌های کاربر
   @Post('balances')
   async getUserBalances(@Body('userId') userId: string) {
