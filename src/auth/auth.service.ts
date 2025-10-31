@@ -201,38 +201,57 @@ export class AuthService {
     await this.userModel.findByIdAndUpdate(userId, { refreshToken: hashed });
   }
 
-  // === Send Verification Email ===
-  private async sendVerificationEmail(email: string, token: string) {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+// === Send Verification Email ===
+private async sendVerificationEmail(email: string, token: string) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
 
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-    const mailOptions = {
-      from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: 'Verify your FORTEN account',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding:20px;">
-          <h2>Welcome to FORTEN</h2>
-          <p>Please verify your email to activate your account:</p>
-          <a href="${verificationUrl}" style="background:#2ff1b4;padding:10px 20px;border-radius:5px;">Verify Email</a>
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+  const mailOptions = {
+    from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
+    to: email,
+    subject: 'Your FORTEN Verification Code',
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #0b0f14; color: #e5fff7;">
+        <h2 style="color:#2ff1b4;">Welcome to FORTEN</h2>
+        <p style="font-size:15px;">Please use the verification code below to verify your email address.</p>
+
+        <div style="margin:25px 0; text-align:center;">
+          <div style="
+            display:inline-block;
+            background:#1a2b23;
+            border:2px dashed #2ff1b4;
+            color:#2ff1b4;
+            font-size:18px;
+            font-weight:bold;
+            letter-spacing:2px;
+            padding:12px 20px;
+            border-radius:8px;
+          ">
+            ${token}
+          </div>
         </div>
-      `,
-    };
 
-    try {
-      await transporter.sendMail(mailOptions);
-      console.log(`📧 Verification email sent to ${email}`);
-    } catch (error) {
-      console.error('❌ Failed to send verification email:', error.message);
-      throw new BadRequestException('Failed to send verification email');
-    }
-  }
+        <p style="font-size:14px;color:#9fc9b7;">
+          Copy the above code and paste it into the verification form in your FORTEN account.
+        </p>
+
+        <hr style="border:0;border-top:1px solid #2ff1b422;margin:25px 0;">
+        <p style="font-size:12px;color:#6b8a7c;">
+          If you did not request this, please ignore this email.
+        </p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+}
+
 
   // === Send Password Reset Email ===
   private async sendResetPasswordEmail(email: string, token: string, firstName?: string) {
