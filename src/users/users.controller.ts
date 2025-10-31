@@ -30,14 +30,14 @@ export class UsersController {
 
   // 🟢 دریافت یک کاربر با آیدی از بادی
   @Post('find')
-  findOne(@Body('id') id: string) {
-    return this.usersService.findById(id);
+  findOne(@Body('id') userId: string) {
+    return this.usersService.findById(userId);
   }
 
   // 🟢 به‌روزرسانی کاربر با آیدی از بادی
   @Post('update')
-  update(@Body() body: { id: string; data: Partial<User> }) {
-    return this.usersService.updateUser(body.id, body.data);
+  update(@Body() body: { userId: string; data: Partial<User> }) {
+    return this.usersService.updateUser(body.userId, body.data);
   }
 
   // 🟢 دریافت موجودی حساب‌های کاربر
