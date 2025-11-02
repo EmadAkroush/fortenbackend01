@@ -35,7 +35,7 @@ export class PaymentsService {
       if (!appUrl)
         throw new Error('Server configuration error: Missing APP_URL');
 
-      const supportedNetworks = ['TRX', 'BTC', 'ETH', 'USDT', 'BNB', 'LTC'];
+      const supportedNetworks = ['MATIC', 'USDT', 'BNB', 'USDT'];
       if (!supportedNetworks.includes(network.toUpperCase())) {
         this.logger.warn(`⚠️ Unsupported network requested: ${network}`);
         throw new Error(`Unsupported payment network: ${network}`);
