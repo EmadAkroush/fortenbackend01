@@ -37,10 +37,12 @@ export class PaymentsService {
       if (!appUrl)
         throw new Error('Server configuration error: Missing APP_URL');
 
-      const cleanNetwork = network.toUpperCase().split(' ')[0].trim();
-      const supportedNetworks = ['MATIC', 'USDT', 'BNB'];
 
-      if (!supportedNetworks.includes(cleanNetwork)) {
+
+   
+      const supportedNetworks = ['MATIC', 'USDTBSC', 'BNBBSC', 'USDTMATIC'];
+
+      if (!supportedNetworks.includes(network)) {
         this.logger.warn(`⚠️ Unsupported network requested: ${network}`);
         throw new Error(`Unsupported payment network: ${network}`);
       }
@@ -51,7 +53,7 @@ export class PaymentsService {
         {
           price_amount: amountUsd,
           price_currency: 'USD',
-          pay_currency: cleanNetwork,
+          pay_currency: network,
           order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
         },
