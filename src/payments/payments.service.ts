@@ -51,7 +51,7 @@ export class PaymentsService {
         {
           price_amount: amountUsd,
           price_currency: 'USD',
-          pay_currency: network.toUpperCase(),
+          pay_currency: cleanNetwork,
           order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
         },
