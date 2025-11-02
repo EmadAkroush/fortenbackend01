@@ -31,12 +31,16 @@ export class PaymentsService {
       const appUrl = this.config.get('APP_URL');
 
       if (!apiKey)
-        throw new Error('Server configuration error: Missing NOWPAYMENTS_API_KEY');
+        throw new Error(
+          'Server configuration error: Missing NOWPAYMENTS_API_KEY',
+        );
       if (!appUrl)
         throw new Error('Server configuration error: Missing APP_URL');
 
-      const supportedNetworks = ['MATIC', 'USDT', 'BNB', 'USDT'];
-      if (!supportedNetworks.includes(network.toUpperCase())) {
+      const cleanNetwork = network.toUpperCase().split(' ')[0].trim();
+      const supportedNetworks = ['MATIC', 'USDT', 'BNB'];
+
+      if (!supportedNetworks.includes(cleanNetwork)) {
         this.logger.warn(`⚠️ Unsupported network requested: ${network}`);
         throw new Error(`Unsupported payment network: ${network}`);
       }
@@ -94,7 +98,11 @@ export class PaymentsService {
           `❌ [AxiosError] ${error.message}`,
           JSON.stringify(error.response?.data || {}, null, 2),
         );
-      else this.logger.error('❌ [Payment Creation Error]', error.stack || error.message);
+      else
+        this.logger.error(
+          '❌ [Payment Creation Error]',
+          error.stack || error.message,
+        );
 
       throw new Error(error?.message || 'Payment creation failed');
     }
