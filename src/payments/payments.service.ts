@@ -30,19 +30,10 @@ export class PaymentsService {
       const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
       const appUrl = this.config.get('APP_URL');
 
-      if (!apiKey) {
-        this.logger.error(
-          '❌ NOWPAYMENTS_API_KEY is missing in environment variables',
-        );
-        throw new Error(
-          'Server configuration error: Missing NOWPAYMENTS_API_KEY',
-        );
-      }
-
-      if (!appUrl) {
-        this.logger.error('❌ APP_URL is missing in environment variables');
+      if (!apiKey)
+        throw new Error('Server configuration error: Missing NOWPAYMENTS_API_KEY');
+      if (!appUrl)
         throw new Error('Server configuration error: Missing APP_URL');
-      }
 
       const supportedNetworks = ['TRX', 'BTC', 'ETH', 'USDT', 'BNB', 'LTC'];
       if (!supportedNetworks.includes(network.toUpperCase())) {
@@ -51,9 +42,6 @@ export class PaymentsService {
       }
 
       // 🟢 ارسال درخواست به NowPayments
-      this.logger.log(
-        '➡️ Sending payment creation request to NOWPayments API...',
-      );
       const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
@@ -69,17 +57,8 @@ export class PaymentsService {
         },
       );
 
-      this.logger.debug(
-        `✅ [NOWPayments Response]: ${JSON.stringify(response.data, null, 2)}`,
-      );
-
-      if (!response.data?.payment_id || !response.data?.pay_address) {
-        this.logger.error(
-          '❌ Invalid response from NOWPayments:',
-          response.data,
-        );
+      if (!response.data?.payment_id || !response.data?.pay_address)
         throw new Error('Invalid response from NOWPayments API');
-      }
 
       // 🧾 ذخیره در دیتابیس
       const payment = await this.paymentModel.create({
@@ -92,9 +71,15 @@ export class PaymentsService {
         payAddress: response.data.pay_address,
       });
 
-      this.logger.log(
-        `💾 Payment saved: ${payment.paymentId} (${network.toUpperCase()})`,
-      );
+      // ✅ تراکنش اولیه (در حال پرداخت)
+      await this.transactionsService.createTransaction({
+        userId,
+        type: 'deposit',
+        amount: amountUsd,
+        currency: 'USD',
+        status: 'pending',
+        note: `Payment created (${network.toUpperCase()}) #${payment.paymentId}`,
+      });
 
       return {
         success: true,
@@ -104,18 +89,13 @@ export class PaymentsService {
         payCurrency: network.toUpperCase(),
       };
     } catch (error) {
-      // 🧨 لاگ دقیق خطا
-      if (axios.isAxiosError(error)) {
+      if (axios.isAxiosError(error))
         this.logger.error(
           `❌ [AxiosError] ${error.message}`,
           JSON.stringify(error.response?.data || {}, null, 2),
         );
-      } else {
-        this.logger.error(
-          '❌ [Payment Creation Error]',
-          error.stack || error.message,
-        );
-      }
+      else this.logger.error('❌ [Payment Creation Error]', error.stack || error.message);
+
       throw new Error(error?.message || 'Payment creation failed');
     }
   }
@@ -140,20 +120,21 @@ export class PaymentsService {
 
     payment.status = data.payment_status;
 
+    // 🧾 همیشه لاگ تراکنش IPN (صرف‌نظر از نوع وضعیت)
+    await this.transactionsService.createTransaction({
+      userId: payment.userId,
+      type: 'deposit',
+      amount: payment.amount,
+      currency: 'USD',
+      status: data.payment_status,
+      note: `IPN update: ${data.payment_status} (${payment.payCurrency}) #${payment.paymentId}`,
+    });
+
     if (data.payment_status === 'finished') {
       this.logger.log(`✅ Payment finished for user: ${payment.userId}`);
 
       payment.confirmedAt = new Date();
       payment.txHash = data.payin_hash;
-
-      await this.transactionsService.createTransaction({
-        userId: payment.userId,
-        type: 'deposit',
-        amount: payment.amount,
-        currency: 'USD',
-        status: 'completed',
-        note: `Deposit confirmed via NOWPayments (${payment.payCurrency}) #${payment.paymentId}`,
-      });
 
       await this.usersService.addBalance(
         payment.userId,
@@ -172,23 +153,6 @@ export class PaymentsService {
           `⚠️ Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
         );
       }
-    } else if (
-      ['failed', 'expired', 'refunded', 'cancelled'].includes(
-        data.payment_status,
-      )
-    ) {
-      this.logger.warn(
-        `❌ Payment ${payment.paymentId} failed with status: ${data.payment_status}`,
-      );
-
-      await this.transactionsService.createTransaction({
-        userId: payment.userId,
-        type: 'deposit',
-        amount: payment.amount,
-        currency: 'USD',
-        status: 'failed',
-        note: `Deposit failed via NOWPayments (${payment.payCurrency}) #${payment.paymentId} | Status: ${data.payment_status}`,
-      });
     }
 
     await payment.save();
