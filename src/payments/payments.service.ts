@@ -6,7 +6,7 @@ import { Payment } from './payment.schema';
 import { ConfigService } from '@nestjs/config';
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
-import { BonusesService } from '../bonuses/bonuses.service'; // 👈 اضافه شد
+import { BonusesService } from '../bonuses/bonuses.service';
 
 @Injectable()
 export class PaymentsService {
@@ -17,22 +17,35 @@ export class PaymentsService {
     private readonly config: ConfigService,
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService,
-    private readonly bonusesService: BonusesService, // 👈 اضافه شد
+    private readonly bonusesService: BonusesService,
   ) {}
 
   // 🟢 ایجاد پرداخت جدید با انتخاب شبکه (TRX, BTC, USDT, ...)
-  async createTrxPayment(userId: string, amountUsd: number, network: string ) {
+  async createTrxPayment(userId: string, amountUsd: number, network: string) {
+    this.logger.log(`📤 [createTrxPayment] User: ${userId}, Amount: ${amountUsd}, Network: ${network}`);
+
     try {
       const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
       const appUrl = this.config.get('APP_URL');
 
-      // 🧩 اعتبارسنجی شبکه ورودی
+      if (!apiKey) {
+        this.logger.error('❌ NOWPAYMENTS_API_KEY is missing in environment variables');
+        throw new Error('Server configuration error: Missing NOWPAYMENTS_API_KEY');
+      }
+
+      if (!appUrl) {
+        this.logger.error('❌ APP_URL is missing in environment variables');
+        throw new Error('Server configuration error: Missing APP_URL');
+      }
+
       const supportedNetworks = ['TRX', 'BTC', 'ETH', 'USDT', 'BNB', 'LTC'];
       if (!supportedNetworks.includes(network.toUpperCase())) {
+        this.logger.warn(`⚠️ Unsupported network requested: ${network}`);
         throw new Error(`Unsupported payment network: ${network}`);
       }
 
-      // 🟢 ایجاد درخواست در NowPayments
+      // 🟢 ارسال درخواست به NowPayments
+      this.logger.log('➡️ Sending payment creation request to NOWPayments API...');
       const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
@@ -44,9 +57,18 @@ export class PaymentsService {
         },
         {
           headers: { 'x-api-key': apiKey },
+          timeout: 15000,
         },
       );
 
+      this.logger.debug(`✅ [NOWPayments Response]: ${JSON.stringify(response.data, null, 2)}`);
+
+      if (!response.data?.payment_id || !response.data?.pay_address) {
+        this.logger.error('❌ Invalid response from NOWPayments:', response.data);
+        throw new Error('Invalid response from NOWPayments API');
+      }
+
+      // 🧾 ذخیره در دیتابیس
       const payment = await this.paymentModel.create({
         userId,
         paymentId: response.data.payment_id,
@@ -57,32 +79,50 @@ export class PaymentsService {
         payAddress: response.data.pay_address,
       });
 
+      this.logger.log(`💾 Payment saved: ${payment.paymentId} (${network.toUpperCase()})`);
+
       return {
+        success: true,
         message: 'Payment created successfully',
         paymentId: payment.paymentId,
         payAddress: response.data.pay_address,
         payCurrency: network.toUpperCase(),
       };
     } catch (error) {
-      this.logger.error('Error creating payment', error);
-      throw error;
+      // 🧨 لاگ دقیق خطا
+      if (axios.isAxiosError(error)) {
+        this.logger.error(
+          `❌ [AxiosError] ${error.message}`,
+          JSON.stringify(error.response?.data || {}, null, 2),
+        );
+      } else {
+        this.logger.error('❌ [Payment Creation Error]', error.stack || error.message);
+      }
+      throw new Error(error?.message || 'Payment creation failed');
     }
   }
 
   // ✅ IPN Handler (تأیید پرداخت و به‌روزرسانی)
   async handleIpn(data: any) {
+    this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
+
     const payment = await this.paymentModel.findOne({
       paymentId: data.payment_id,
     });
-    if (!payment) return;
+
+    if (!payment) {
+      this.logger.warn(`⚠️ IPN for unknown payment_id: ${data.payment_id}`);
+      return;
+    }
 
     payment.status = data.payment_status;
 
     if (data.payment_status === 'finished') {
+      this.logger.log(`✅ Payment finished for user: ${payment.userId}`);
+
       payment.confirmedAt = new Date();
       payment.txHash = data.payin_hash;
 
-      // 🔹 ثبت تراکنش موفق
       await this.transactionsService.createTransaction({
         userId: payment.userId,
         type: 'deposit',
@@ -92,7 +132,6 @@ export class PaymentsService {
         note: `Deposit confirmed via NOWPayments (${payment.payCurrency}) #${payment.paymentId}`,
       });
 
-      // 🔹 افزایش موجودی حساب اصلی
       await this.usersService.addBalance(
         payment.userId,
         'mainBalance',
@@ -107,7 +146,7 @@ export class PaymentsService {
         );
       } catch (bonusError) {
         this.logger.warn(
-          `Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
+          `⚠️ Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
         );
       }
     } else if (
@@ -115,7 +154,10 @@ export class PaymentsService {
         data.payment_status,
       )
     ) {
-      // ❌ ثبت تراکنش ناموفق در لاگ
+      this.logger.warn(
+        `❌ Payment ${payment.paymentId} failed with status: ${data.payment_status}`,
+      );
+
       await this.transactionsService.createTransaction({
         userId: payment.userId,
         type: 'deposit',
@@ -124,12 +166,9 @@ export class PaymentsService {
         status: 'failed',
         note: `Deposit failed via NOWPayments (${payment.payCurrency}) #${payment.paymentId} | Status: ${data.payment_status}`,
       });
-
-      this.logger.warn(
-        `⚠️ Payment failed for user ${payment.userId} (status: ${data.payment_status})`,
-      );
     }
 
     await payment.save();
+    this.logger.log(`💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status}`);
   }
 }
