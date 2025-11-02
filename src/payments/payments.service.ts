@@ -22,15 +22,21 @@ export class PaymentsService {
 
   // 🟢 ایجاد پرداخت جدید با انتخاب شبکه (TRX, BTC, USDT, ...)
   async createTrxPayment(userId: string, amountUsd: number, network: string) {
-    this.logger.log(`📤 [createTrxPayment] User: ${userId}, Amount: ${amountUsd}, Network: ${network}`);
+    this.logger.log(
+      `📤 [createTrxPayment] User: ${userId}, Amount: ${amountUsd}, Network: ${network}`,
+    );
 
     try {
       const apiKey = this.config.get('NOWPAYMENTS_API_KEY');
       const appUrl = this.config.get('APP_URL');
 
       if (!apiKey) {
-        this.logger.error('❌ NOWPAYMENTS_API_KEY is missing in environment variables');
-        throw new Error('Server configuration error: Missing NOWPAYMENTS_API_KEY');
+        this.logger.error(
+          '❌ NOWPAYMENTS_API_KEY is missing in environment variables',
+        );
+        throw new Error(
+          'Server configuration error: Missing NOWPAYMENTS_API_KEY',
+        );
       }
 
       if (!appUrl) {
@@ -45,7 +51,9 @@ export class PaymentsService {
       }
 
       // 🟢 ارسال درخواست به NowPayments
-      this.logger.log('➡️ Sending payment creation request to NOWPayments API...');
+      this.logger.log(
+        '➡️ Sending payment creation request to NOWPayments API...',
+      );
       const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
@@ -61,10 +69,15 @@ export class PaymentsService {
         },
       );
 
-      this.logger.debug(`✅ [NOWPayments Response]: ${JSON.stringify(response.data, null, 2)}`);
+      this.logger.debug(
+        `✅ [NOWPayments Response]: ${JSON.stringify(response.data, null, 2)}`,
+      );
 
       if (!response.data?.payment_id || !response.data?.pay_address) {
-        this.logger.error('❌ Invalid response from NOWPayments:', response.data);
+        this.logger.error(
+          '❌ Invalid response from NOWPayments:',
+          response.data,
+        );
         throw new Error('Invalid response from NOWPayments API');
       }
 
@@ -79,7 +92,9 @@ export class PaymentsService {
         payAddress: response.data.pay_address,
       });
 
-      this.logger.log(`💾 Payment saved: ${payment.paymentId} (${network.toUpperCase()})`);
+      this.logger.log(
+        `💾 Payment saved: ${payment.paymentId} (${network.toUpperCase()})`,
+      );
 
       return {
         success: true,
@@ -96,7 +111,10 @@ export class PaymentsService {
           JSON.stringify(error.response?.data || {}, null, 2),
         );
       } else {
-        this.logger.error('❌ [Payment Creation Error]', error.stack || error.message);
+        this.logger.error(
+          '❌ [Payment Creation Error]',
+          error.stack || error.message,
+        );
       }
       throw new Error(error?.message || 'Payment creation failed');
     }
@@ -107,11 +125,16 @@ export class PaymentsService {
     this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
 
     const payment = await this.paymentModel.findOne({
-      paymentId: data.payment_id,
+      $or: [
+        { paymentId: data.payment_id },
+        { paymentId: data.parent_payment_id },
+      ],
     });
 
     if (!payment) {
-      this.logger.warn(`⚠️ IPN for unknown payment_id: ${data.payment_id}`);
+      this.logger.warn(
+        `⚠️ No matching payment found for IPN (id: ${data.payment_id})`,
+      );
       return;
     }
 
@@ -169,6 +192,8 @@ export class PaymentsService {
     }
 
     await payment.save();
-    this.logger.log(`💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status}`);
+    this.logger.log(
+      `💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status}`,
+    );
   }
 }
