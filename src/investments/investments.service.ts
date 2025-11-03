@@ -266,7 +266,7 @@ async createInvestment(dto: CreateInvestmentDto) {
 // 🟠 محاسبه سود روزانه (تابع عمومی برای CronJob)
 // 🟠 محاسبه سود روزانه (تابع عمومی برای CronJob)
 async calculateDailyProfits() {
-  // 👇 اینجا populate انجام می‌دهیم تا به package.name و user.email دسترسی داشته باشیم
+  // 👇 populate برای دسترسی به اطلاعات کاربر و پکیج
   const investments = await this.investmentModel
     .find({ status: 'active' })
     .populate<{ user: User }>('user')
@@ -275,8 +275,9 @@ async calculateDailyProfits() {
   for (const inv of investments) {
     const profit = (inv.amount * inv.dailyRate) / 100;
 
-    // ✅ افزودن سود به سرمایه‌گذاری
+    // ✅ افزودن سود به سرمایه‌گذاری (سود مرکب)
     inv.totalProfit += profit;
+    inv.amount += profit; // 👈 این خط جدید اضافه شد (سود به اصل سرمایه افزوده می‌شود)
     await inv.save();
 
     // ✅ افزودن سود به حساب کاربر
@@ -291,17 +292,18 @@ async calculateDailyProfits() {
       amount: profit,
       currency: 'USD',
       status: 'completed',
-      note: `Daily profit (${inv.dailyRate}% of ${inv.amount}) for ${inv.package.name}`,
+      note: `Daily profit (${inv.dailyRate}% of ${inv.amount - profit}) for ${inv.package.name}`,
     });
 
     this.logger.log(
-      `💰 Profit ${profit.toFixed(2)} USD added for ${inv.user.email} (${inv.package.name})`,
+      `💰 Profit ${profit.toFixed(2)} USD added for ${inv.user.email} (${inv.package.name}) — new amount: ${inv.amount.toFixed(2)}`
     );
   }
 
-  this.logger.log('✅ Daily profits calculated successfully');
-  return { message: 'Daily profits calculated and logged successfully' };
+  this.logger.log('✅ Daily profits calculated successfully (compound mode)');
+  return { message: 'Daily profits calculated and logged successfully (compound mode)' };
 }
+
 
 
 
