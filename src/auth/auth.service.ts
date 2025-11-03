@@ -213,12 +213,12 @@ private async sendVerificationEmail(email: string, token: string) {
 
   const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
   const mailOptions = {
-    from: `"FORTEN Support" <${process.env.MAIL_USER}>`,
+    from: `"finalxcard Support" <${process.env.MAIL_USER}>`,
     to: email,
-    subject: 'Your FORTEN Verification Code',
+    subject: 'Your finalxcard Verification Code',
     html: `
       <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #0b0f14; color: #e5fff7;">
-        <h2 style="color:#2ff1b4;">Welcome to FORTEN</h2>
+        <h2 style="color:#2ff1b4;">Welcome to finalxcard</h2>
         <p style="font-size:15px;">Please use the verification code below to verify your email address.</p>
 
         <div style="margin:25px 0; text-align:center;">
@@ -238,7 +238,7 @@ private async sendVerificationEmail(email: string, token: string) {
         </div>
 
         <p style="font-size:14px;color:#9fc9b7;">
-          Copy the above code and paste it into the verification form in your FORTEN account.
+          Copy the above code and paste it into the verification form in your finalxcard account.
         </p>
 
         <hr style="border:0;border-top:1px solid #2ff1b422;margin:25px 0;">
