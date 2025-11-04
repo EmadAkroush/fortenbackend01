@@ -7,6 +7,8 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { ReferralsModule } from '../referrals/referrals.module';
+
 
 @Module({
   imports: [
@@ -16,6 +18,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
       signOptions: { expiresIn: '1h' },
     }),
     MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    ReferralsModule,
     UsersModule,
   ],
   controllers: [AuthController],
