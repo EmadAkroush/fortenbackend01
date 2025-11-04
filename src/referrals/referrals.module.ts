@@ -13,6 +13,6 @@ import { TransactionsModule } from '../transactions/transactions.module';
   ],
   providers: [ReferralsService],
   controllers: [ReferralsController],
-  exports: [ReferralsService],
+  exports: [ReferralsService,   MongooseModule ],
 })
 export class ReferralsModule {}
