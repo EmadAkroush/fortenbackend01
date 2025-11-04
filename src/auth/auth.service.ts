@@ -5,10 +5,12 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { Referral } from '../referrals/schemas/referrals.schema';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import * as mongoose from 'mongoose';
 import { User } from '../users/schemas/user.schema';
 import * as nodemailer from 'nodemailer';
 import { randomBytes } from 'crypto';
@@ -19,41 +21,68 @@ import * as fs from 'fs';
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<User>,
+     @InjectModel('Referral') private readonly referralModel: Model<Referral>,
     private jwtService: JwtService,
   ) {}
 
   // === Register User ===
-  async register(dto: any) {
-    const existingUser = await this.userModel.findOne({ email: dto.email });
-    if (existingUser) throw new ConflictException('Email already in use');
+// === Register User ===
+async register(dto: any) {
+  const existingUser = await this.userModel.findOne({ email: dto.email });
+  if (existingUser) throw new ConflictException('Email already in use');
 
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const vxCode = 'FO-' + Math.floor(100000 + Math.random() * 900000);
-    const verificationToken = randomBytes(32).toString('hex');
+  const hashedPassword = await bcrypt.hash(dto.password, 10);
+  const vxCode = 'FO-' + Math.floor(100000 + Math.random() * 900000);
+  const verificationToken = randomBytes(32).toString('hex');
 
-    const user = await this.userModel.create({
-      username: dto.username,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      email: dto.email,
-      phone: dto.phone,
-      password: hashedPassword,
-      vxCode,
-      isVerified: false,
-      verificationToken,
-    });
+  const user = await this.userModel.create({
+    username: dto.username,
+    firstName: dto.firstName,
+    lastName: dto.lastName,
+    email: dto.email,
+    phone: dto.phone,
+    password: hashedPassword,
+    vxCode,
+    isVerified: false,
+    verificationToken,
+  });
 
-    await this.sendVerificationEmail(user.email, verificationToken);
+  // ✅ اگر referrerCode فرستاده شده باشد، بررسی و ثبت شود
+  if (dto.referrerCode) {
+    const referrer = await this.userModel.findOne({ vxCode: dto.referrerCode });
+    if (referrer) {
+      // ثبت رابطه‌ی ارجاع
+      user.referredBy = referrer.vxCode;
+      await user.save();
 
-    const userId = user._id.toString();
-    const tokens = await this.generateTokens(userId, user.email);
-    await this.updateRefreshToken(userId, tokens.refreshToken);
+      await this.referralModel.create({
+        referrer: referrer._id,
+        referredUser: user._id,
+      });
 
-    return {
-      message: 'Registration successful. Please verify your email before login.',
-      user,
-    };
+      referrer.referrals.push(new mongoose.Types.ObjectId(user._id.toString()));
+      await referrer.save();
+    } else {
+      // ⚠️ اگر کد لیدر اشتباه بود — برای فرانت اند ارسال شود
+      return {
+        success: false,
+        message: 'Invalid referral code.',
+      };
+    }
   }
+
+  await this.sendVerificationEmail(user.email, verificationToken);
+
+  const userId = user._id.toString();
+  const tokens = await this.generateTokens(userId, user.email);
+  await this.updateRefreshToken(userId, tokens.refreshToken);
+
+  return {
+    message: 'Registration successful. Please verify your email before login.',
+    user,
+  };
+}
+
 
   // === Verify Email ===
   async verifyEmail(token: string) {
