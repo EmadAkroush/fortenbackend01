@@ -37,9 +37,6 @@ export class PaymentsService {
       if (!appUrl)
         throw new Error('Server configuration error: Missing APP_URL');
 
-
-
-   
       const supportedNetworks = ['MATIC', 'USDTBSC', 'BNBBSC', 'USDTMATIC'];
 
       if (!supportedNetworks.includes(network)) {
@@ -114,11 +111,9 @@ export class PaymentsService {
   async handleIpn(data: any) {
     this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
 
+  
     const payment = await this.paymentModel.findOne({
-      $or: [
-        { paymentId: data.payment_id },
-        { paymentId: data.parent_payment_id },
-      ],
+      paymentId: data.payment_id,
     });
 
     if (!payment) {
