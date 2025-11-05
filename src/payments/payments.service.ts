@@ -1,9 +1,13 @@
+// ===========================
+// ✅ PaymentsService (نسخه‌ی بهینه و ایمن)
+// ===========================
+
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios from 'axios';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import axios from 'axios';
-import { Payment } from './payment.schema';
-import { ConfigService } from '@nestjs/config';
+import { Payment } from '../payments/payment.schema';
 import { UsersService } from '../users/users.service';
 import { TransactionsService } from '../transactions/transactions.service';
 import { BonusesService } from '../bonuses/bonuses.service';
@@ -13,8 +17,8 @@ export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
   constructor(
-    @InjectModel(Payment.name) private paymentModel: Model<Payment>,
     private readonly config: ConfigService,
+    @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService,
     private readonly bonusesService: BonusesService,
@@ -44,7 +48,7 @@ export class PaymentsService {
         throw new Error(`Unsupported payment network: ${network}`);
       }
 
-      // 🟢 ارسال درخواست به NowPayments
+      // 🟢 درخواست ایجاد پرداخت در NowPayments
       const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
@@ -60,35 +64,41 @@ export class PaymentsService {
         },
       );
 
-      if (!response.data?.payment_id || !response.data?.pay_address)
+      const { payment_id, pay_address, payment_status } = response.data;
+
+      if (!payment_id || !pay_address)
         throw new Error('Invalid response from NOWPayments API');
 
-      // 🧾 ذخیره در دیتابیس
+      // 🧾 ذخیره در دیتابیس (تبدیل همه چیز به رشته ایمن)
       const payment = await this.paymentModel.create({
         userId,
-        paymentId: response.data.payment_id,
-        status: response.data.payment_status,
+        paymentId: String(payment_id),
+        status: payment_status || 'pending',
         amount: amountUsd,
         currency: 'USD',
         payCurrency: network.toUpperCase(),
-        payAddress: response.data.pay_address,
+        payAddress: pay_address,
       });
 
-      // ✅ تراکنش اولیه (در حال پرداخت)
+      // ✅ ثبت تراکنش اولیه
       await this.transactionsService.createTransaction({
         userId,
         type: 'deposit',
         amount: amountUsd,
         currency: 'USD',
         status: 'pending',
-        note: `Payment created (${network.toUpperCase()}) #${payment.paymentId}`,
+        note: `Payment created (${network.toUpperCase()}) #${String(payment_id)}`,
       });
+
+      this.logger.log(
+        `✅ Payment created successfully | paymentId=${payment.paymentId}`,
+      );
 
       return {
         success: true,
         message: 'Payment created successfully',
         paymentId: payment.paymentId,
-        payAddress: response.data.pay_address,
+        payAddress: payment.payAddress,
         payCurrency: network.toUpperCase(),
       };
     } catch (error) {
@@ -111,9 +121,12 @@ export class PaymentsService {
   async handleIpn(data: any) {
     this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
 
-  
+    // 🔍 پیدا کردن پرداخت (با id یا parent id)
     const payment = await this.paymentModel.findOne({
-      paymentId: data.payment_id,
+      $or: [
+        { paymentId: String(data.payment_id) },
+        { paymentId: String(data.parent_payment_id) },
+      ],
     });
 
     if (!payment) {
@@ -123,9 +136,10 @@ export class PaymentsService {
       return;
     }
 
-    payment.status = data.payment_status;
+    // ⏳ به‌روزرسانی وضعیت
+    payment.status = data.payment_status || payment.status;
 
-    // 🧾 همیشه لاگ تراکنش IPN (صرف‌نظر از نوع وضعیت)
+    // 🧾 لاگ‌گذاری هر نوع IPN
     await this.transactionsService.createTransaction({
       userId: payment.userId,
       type: 'deposit',
@@ -135,17 +149,29 @@ export class PaymentsService {
       note: `IPN update: ${data.payment_status} (${payment.payCurrency}) #${payment.paymentId}`,
     });
 
+    // ✅ پرداخت موفق
     if (data.payment_status === 'finished') {
       this.logger.log(`✅ Payment finished for user: ${payment.userId}`);
 
       payment.confirmedAt = new Date();
-      payment.txHash = data.payin_hash;
+      payment.txHash = data.payin_hash || payment.txHash;
 
-      await this.usersService.addBalance(
-        payment.userId,
-        'mainBalance',
-        payment.amount,
-      );
+      // 💰 افزودن موجودی به حساب کاربر
+      try {
+        await this.usersService.addBalance(
+          payment.userId,
+          'mainBalance',
+          payment.amount,
+        );
+        this.logger.log(
+          `💰 Balance updated successfully for user: ${payment.userId}`,
+        );
+      } catch (err) {
+        this.logger.error(
+          `❌ Failed to update user balance: ${payment.userId}`,
+          err.message,
+        );
+      }
 
       // 🎁 بررسی پاداش لیدر
       try {
