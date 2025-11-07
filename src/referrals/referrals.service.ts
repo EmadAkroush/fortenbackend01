@@ -94,25 +94,45 @@ export class ReferralsService {
   }
 
   // 🔍 جزئیات نود (برای نمایش در درخت ریفرال)
-  async getReferralNodeDetails(userId: string) {
+  async getReferralNodeDetails(userId: string, depth = 3) {
+  // تابع بازگشتی برای ساخت درخت
+  const buildTree = async (referrerId: string, level = 1): Promise<any[]> => {
+    if (level > depth) return [];
+
     const referrals = await this.referralModel
-      .find({ referrer: new Types.ObjectId(userId) })
-      .populate('referredUser', 'firstName lastName email vxCode mainBalance profitBalance')
+      .find({ referrer: new Types.ObjectId(referrerId) })
+      .populate(
+        'referredUser',
+        'firstName lastName email vxCode mainBalance profitBalance',
+      )
       .exec();
 
-    return referrals.map((r) => ({
-      id: r.referredUser['_id'],
-      name: `${r.referredUser['firstName']} ${r.referredUser['lastName']}`,
-      email: r.referredUser['email'],
-      vxCode: r.referredUser['vxCode'],
-      balances: {
-        main: r.referredUser['mainBalance'],
-        profit: r.referredUser['profitBalance'],
-      },
-      profitEarned: r.profitEarned,
-      joinedAt: r.joinedAt,
-    }));
-  }
+    return Promise.all(
+      referrals.map(async (r) => {
+        const referred = r.referredUser as any;
+        if (!referred) return null;
+
+        const children = await buildTree(referred._id.toString(), level + 1);
+
+        return {
+          id: referred._id.toString(),
+          name: `${referred.firstName } ${referred.lastName}`,
+          email: referred.email,
+          vxCode: referred.vxCode,
+          balances: {
+            main: referred.mainBalance,
+            profit: referred.profitBalance,
+          },
+          profitEarned: r.profitEarned,
+          joinedAt: r.joinedAt,
+          children, // 👈 اضافه شد برای نمایش سطح‌های پایین‌تر
+        };
+      }),
+    ).then((res) => res.filter(Boolean));
+  };
+
+  return await buildTree(userId);
+}
 
 @Cron('30 1 * * *')
 async calculateReferralProfits() {
