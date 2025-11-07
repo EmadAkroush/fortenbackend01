@@ -28,6 +28,12 @@ export class ReferralsController {
     return this.referralsService.getReferralStats(userId);
   }
 
+    // 📈 آمار کلی
+  @Post('statscount')
+  async getReferralStatsCount(@Body('userId') userId: string) {
+    return this.referralsService.getReferralStatsCount(userId);
+  }
+
   // 🔍 جزئیات نود خاص
   @Post('node')
   async getReferralNodeDetails(@Body('userId') userId: string) {

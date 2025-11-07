@@ -6,6 +6,8 @@ import { UsersService } from '../users/users.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as mongoose from 'mongoose';
 import { TransactionsService } from '../transactions/transactions.service'; // ✅ اضافه شد
+import { User } from '../users/schemas/user.schema';
+
 
 @Injectable()
 export class ReferralsService {
@@ -13,8 +15,10 @@ export class ReferralsService {
 
   constructor(
     @InjectModel(Referral.name) private referralModel: Model<Referral>,
+    @InjectModel(User.name) private readonly userModel: Model<User>, // ✅ اضافه کن
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService, // ✅ اضافه شد
+    
   ) {}
 
   // 📥 ثبت زیرمجموعه جدید (در ثبت‌نام یا پروفایل)
@@ -92,6 +96,63 @@ export class ReferralsService {
 
     return { totalReferrals, totalProfit, totalInvested };
   }
+
+async getReferralStatsCount(userId: string) {
+    this.logger.log(`🚀 Calculating referral stats for userId: ${userId}`);
+
+    // 🧩 پیدا کردن کاربر اصلی
+    const rootUser = await this.userModel.findById(userId).lean();
+    if (!rootUser) {
+      this.logger.error(`❌ User not found for ID: ${userId}`);
+      throw new Error('User not found');
+    }
+
+    const rootVxCode = rootUser.vxCode;
+    this.logger.debug(`🎯 Root vxCode: ${rootVxCode}`);
+
+    // 🟠 سطح 1: تمام کسانی که referralCode = vxCode کاربر اصلی دارند
+    const level1 = await this.userModel
+      .find({ referralCode: rootVxCode })
+      .select('_id vxCode email firstName lastName')
+      .lean();
+    this.logger.debug(`🧩 Level 1 referrals found: ${level1.length}`);
+
+    // 🟡 سطح 2: کسانی که referralCode = vxCode یکی از level1 هستند
+    const level1Codes = level1.map((u) => u.vxCode);
+    const level2 = await this.userModel
+      .find({ referralCode: { $in: level1Codes } })
+      .select('_id vxCode email firstName lastName')
+      .lean();
+    this.logger.debug(`🧩 Level 2 referrals found: ${level2.length}`);
+
+    // 🟢 سطح 3: کسانی که referralCode = vxCode یکی از level2 هستند
+    const level2Codes = level2.map((u) => u.vxCode);
+    const level3 = await this.userModel
+      .find({ referralCode: { $in: level2Codes } })
+      .select('_id vxCode email firstName lastName')
+      .lean();
+    this.logger.debug(`🧩 Level 3 referrals found: ${level3.length}`);
+
+    // 📊 محاسبه درصد پیشرفت فرضی (مثلاً هر سطح کامل = 33%)
+    const totalLevels = 3;
+    const filledLevels = [level1.length, level2.length, level3.length].filter(
+      (l) => l > 0,
+    ).length;
+    const progress = Math.round((filledLevels / totalLevels) * 100);
+
+    this.logger.log(
+      `✅ Referral stats calculated: L1=${level1.length}, L2=${level2.length}, L3=${level3.length}`,
+    );
+
+    return {
+      level1Count: level1.length,
+      level2Count: level2.length,
+      level3Count: level3.length,
+      progress,
+    };
+  }
+
+  
 
   // 🔍 جزئیات نود (برای نمایش در درخت ریفرال)
   async getReferralNodeDetails(userId: string, depth = 3) {

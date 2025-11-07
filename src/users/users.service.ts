@@ -24,8 +24,8 @@ export class UsersService {
   }
 
   // 🔍 پیدا کردن با ID
-  async findById(id: string): Promise<User | null> {
-    return this.userModel.findById(id).exec();
+  async findById(_id: string): Promise<User | null> {
+    return this.userModel.findById({_id}).exec();
   }
 
   // 🔍 پیدا کردن با نام کاربری

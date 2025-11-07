@@ -30,7 +30,9 @@ export class UsersController {
 
   // 🟢 دریافت یک کاربر با آیدی از بادی
   @Post('find')
-  findOne(@Body('id') userId: string) {
+  findOne(@Body() body: { userId: string }) {
+        const userId = body.userId;
+
     return this.usersService.findById(userId);
   }
 
