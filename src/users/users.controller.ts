@@ -30,12 +30,9 @@ export class UsersController {
 
   // 🟢 دریافت یک کاربر با آیدی از بادی
   @Post('find')
-  findOne(@Body() body: { userId: string }) {
-        const userId = body.userId;
-
+  findOne(@Body('id') userId: string) {
     return this.usersService.findById(userId);
   }
-
 @Post('update')
 async update(@Body() body: any) {
   const { userId, ...updateData } = body;

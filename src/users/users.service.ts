@@ -22,10 +22,9 @@ export class UsersService {
   async findByVxCode(vxCode: string): Promise<User | null> {
     return this.userModel.findOne({ vxCode });
   }
-
   // 🔍 پیدا کردن با ID
-  async findById(_id: string): Promise<User | null> {
-    return this.userModel.findById({_id}).exec();
+  async findById(id: string): Promise<User | null> {
+    return this.userModel.findById(id).exec();
   }
 
   // 🔍 پیدا کردن با نام کاربری
