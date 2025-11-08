@@ -16,6 +16,11 @@ export class ReferralsController {
     return this.referralsService.registerReferral(referrerCode, newUserId);
   }
 
+   @Post('earnings')
+  async getReferralEarnings(@Body() body: { userId: string }) {
+    return this.referralsService.getReferralEarnings(body.userId);
+  }
+
   // 📊 لیست زیرمجموعه‌ها
   @Post()
   async getUserReferrals(@Body('userId') userId: string) {

@@ -8,7 +8,6 @@ import * as mongoose from 'mongoose';
 import { TransactionsService } from '../transactions/transactions.service'; // ✅ اضافه شد
 import { User } from '../users/schemas/user.schema';
 
-
 @Injectable()
 export class ReferralsService {
   private readonly logger = new Logger(ReferralsService.name);
@@ -18,7 +17,6 @@ export class ReferralsService {
     @InjectModel(User.name) private readonly userModel: Model<User>, // ✅ اضافه کن
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService, // ✅ اضافه شد
-    
   ) {}
 
   // 📥 ثبت زیرمجموعه جدید (در ثبت‌نام یا پروفایل)
@@ -31,8 +29,7 @@ export class ReferralsService {
     }
 
     const referrer = await this.usersService.findByVxCode(referrerCode);
-    if (!referrer)
-      return { success: false, message: 'Invalid referral code.' };
+    if (!referrer) return { success: false, message: 'Invalid referral code.' };
 
     newUser.referredBy = referrer.vxCode;
     await newUser.save();
@@ -42,7 +39,9 @@ export class ReferralsService {
       referredUser: newUser._id,
     });
 
-    referrer.referrals.push(new mongoose.Types.ObjectId(newUser._id.toString()));
+    referrer.referrals.push(
+      new mongoose.Types.ObjectId(newUser._id.toString()),
+    );
     await referrer.save();
 
     return {
@@ -60,7 +59,10 @@ export class ReferralsService {
   async getUserReferrals(userId: string) {
     const referrals = await this.referralModel
       .find({ referrer: new Types.ObjectId(userId) })
-      .populate('referredUser', 'firstName lastName email vxCode mainBalance profitBalance')
+      .populate(
+        'referredUser',
+        'firstName lastName email vxCode mainBalance profitBalance',
+      )
       .exec();
 
     return referrals.map((r) => ({
@@ -71,7 +73,11 @@ export class ReferralsService {
   }
 
   // 💰 افزودن سود ریفرال
-  async addReferralProfit(referrerId: string, amount: number, fromUserId: string) {
+  async addReferralProfit(
+    referrerId: string,
+    amount: number,
+    fromUserId: string,
+  ) {
     await this.referralModel.findOneAndUpdate(
       { referrer: referrerId, referredUser: fromUserId },
       { $inc: { profitEarned: amount } },
@@ -83,7 +89,10 @@ export class ReferralsService {
   async getReferralStats(userId: string) {
     const referrals = await this.getUserReferrals(userId);
     const totalReferrals = referrals.length;
-    const totalProfit = referrals.reduce((sum, r) => sum + (r.profitEarned || 0), 0);
+    const totalProfit = referrals.reduce(
+      (sum, r) => sum + (r.profitEarned || 0),
+      0,
+    );
 
     const referredUsers = await Promise.all(
       referrals.map(async (r) => {
@@ -97,7 +106,7 @@ export class ReferralsService {
     return { totalReferrals, totalProfit, totalInvested };
   }
 
-async getReferralStatsCount(userId: string) {
+  async getReferralStatsCount(userId: string) {
     this.logger.log(`🚀 Calculating referral stats for userId: ${userId}`);
 
     // 🧩 پیدا کردن کاربر اصلی
@@ -156,105 +165,178 @@ async getReferralStatsCount(userId: string) {
     };
   }
 
-  
+  // 🟢 فقط محاسبه سرمایه‌گذاری‌ها (بدون پاداش)
+  async getReferralEarnings(userId: string) {
+    this.logger.log(
+      `🚀 Calculating referral investments for userId: ${userId}`,
+    );
+
+    // 🧩 1. پیدا کردن کاربر اصلی
+    const rootUser = await this.userModel.findById(userId).lean();
+    if (!rootUser) {
+      this.logger.error(`❌ User not found for ID: ${userId}`);
+      throw new Error('User not found');
+    }
+
+    const rootVxCode = rootUser.vxCode;
+    this.logger.debug(`🎯 Root vxCode: ${rootVxCode}`);
+
+    // 🟠 سطح 1: کاربران مستقیم
+    const level1Users = await this.userModel
+      .find({ referredBy: rootVxCode })
+      .select('_id vxCode mainBalance profitBalance')
+      .lean();
+    this.logger.debug(`📊 Level 1 referrals: ${level1Users.length}`);
+
+    // 🟡 سطح 2
+    const level1Codes = level1Users.map((u) => u.vxCode);
+    const level2Users = level1Codes.length
+      ? await this.userModel
+          .find({ referredBy: { $in: level1Codes } })
+          .select('_id vxCode mainBalance profitBalance')
+          .lean()
+      : [];
+    this.logger.debug(`📊 Level 2 referrals: ${level2Users.length}`);
+
+    // 🟢 سطح 3
+    const level2Codes = level2Users.map((u) => u.vxCode);
+    const level3Users = level2Codes.length
+      ? await this.userModel
+          .find({ referredBy: { $in: level2Codes } })
+          .select('_id vxCode mainBalance profitBalance')
+          .lean()
+      : [];
+    this.logger.debug(`📊 Level 3 referrals: ${level3Users.length}`);
+
+    // 💰 محاسبه مجموع سرمایه‌گذاری هر سطح (مثلاً mainBalance)
+    const sum = (arr: any[], field: string) =>
+      arr.reduce((acc, u) => acc + (Number(u[field]) || 0), 0);
+
+    const level1Investment = sum(level1Users, 'mainBalance');
+    const level2Investment = sum(level2Users, 'mainBalance');
+    const level3Investment = sum(level3Users, 'mainBalance');
+
+    this.logger.log(
+      `✅ Referral investments: L1=${level1Investment}, L2=${level2Investment}, L3=${level3Investment}`,
+    );
+
+    return {
+      level1Investment,
+      level2Investment,
+      level3Investment,
+    };
+  }
 
   // 🔍 جزئیات نود (برای نمایش در درخت ریفرال)
   async getReferralNodeDetails(userId: string, depth = 3) {
-  // تابع بازگشتی برای ساخت درخت
-  const buildTree = async (referrerId: string, level = 1): Promise<any[]> => {
-    if (level > depth) return [];
+    // تابع بازگشتی برای ساخت درخت
+    const buildTree = async (referrerId: string, level = 1): Promise<any[]> => {
+      if (level > depth) return [];
 
-    const referrals = await this.referralModel
-      .find({ referrer: new Types.ObjectId(referrerId) })
-      .populate(
-        'referredUser',
-        'firstName lastName email vxCode mainBalance profitBalance',
-      )
-      .exec();
+      const referrals = await this.referralModel
+        .find({ referrer: new Types.ObjectId(referrerId) })
+        .populate(
+          'referredUser',
+          'firstName lastName email vxCode mainBalance profitBalance',
+        )
+        .exec();
 
-    return Promise.all(
-      referrals.map(async (r) => {
-        const referred = r.referredUser as any;
-        if (!referred) return null;
+      return Promise.all(
+        referrals.map(async (r) => {
+          const referred = r.referredUser as any;
+          if (!referred) return null;
 
-        const children = await buildTree(referred._id.toString(), level + 1);
+          const children = await buildTree(referred._id.toString(), level + 1);
 
-        return {
-          id: referred._id.toString(),
-          name: `${referred.firstName } ${referred.lastName}`,
-          email: referred.email,
-          vxCode: referred.vxCode,
-          balances: {
-            main: referred.mainBalance,
-            profit: referred.profitBalance,
-          },
-          profitEarned: r.profitEarned,
-          joinedAt: r.joinedAt,
-          children, // 👈 اضافه شد برای نمایش سطح‌های پایین‌تر
-        };
-      }),
-    ).then((res) => res.filter(Boolean));
-  };
+          return {
+            id: referred._id.toString(),
+            name: `${referred.firstName} ${referred.lastName}`,
+            email: referred.email,
+            vxCode: referred.vxCode,
+            balances: {
+              main: referred.mainBalance,
+              profit: referred.profitBalance,
+            },
+            profitEarned: r.profitEarned,
+            joinedAt: r.joinedAt,
+            children, // 👈 اضافه شد برای نمایش سطح‌های پایین‌تر
+          };
+        }),
+      ).then((res) => res.filter(Boolean));
+    };
 
-  return await buildTree(userId);
-}
-
-@Cron('30 1 * * *')
-async calculateReferralProfits() {
-  this.logger.log('🔁 Running daily referral profit calculation (corrected)...');
-
-  // دریافت تراکنش‌های سود روز گذشته
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const profitTransactions = await this.transactionsService.findByTypeAndDate('profit', since);
-
-  for (const tx of profitTransactions) {
-    const userId = tx.userId.toString();
-    const user = await this.usersService.findById(userId);
-    if (!user || !user.referredBy) continue;
-
-    const profitAmount = tx.amount; // سودی که از این سرمایه‌گذاری تولید شده
-    let currentReferrerCode = user.referredBy;
-    let level = 1;
-
-    // تا سه سطح بالا
-    while (currentReferrerCode && level <= 3) {
-      const referrer = await this.usersService.findByVxCode(currentReferrerCode);
-      if (!referrer) break;
-
-      let percentage = level === 1 ? 0.15 : level === 2 ? 0.1 : 0.05;
-      const reward = profitAmount * percentage;
-
-      if (reward > 0) {
-        await this.addReferralProfit(referrer._id.toString(), reward, user._id.toString());
-
-        // ثبت تراکنش ریفرال
-        await this.transactionsService.createTransaction({
-          userId: referrer._id.toString(),
-          type: 'referral-profit',
-          amount: reward,
-          currency: 'USD',
-          status: 'completed',
-          note: `Referral profit (Level ${level}) from ${user.email} | source: profit ${profitAmount}`,
-        });
-
-        this.logger.log(
-          `💰 Level ${level} referral profit: +${reward.toFixed(
-            2,
-          )} USD to ${referrer.email} from ${user.email}`,
-        );
-      }
-
-      currentReferrerCode = referrer.referredBy;
-      level++;
-    }
+    return await buildTree(userId);
   }
 
-  this.logger.log('✅ Referral profit distribution completed successfully (based on daily profits only).');
-}
+  @Cron('30 1 * * *')
+  async calculateReferralProfits() {
+    this.logger.log(
+      '🔁 Running daily referral profit calculation (corrected)...',
+    );
+
+    // دریافت تراکنش‌های سود روز گذشته
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const profitTransactions = await this.transactionsService.findByTypeAndDate(
+      'profit',
+      since,
+    );
+
+    for (const tx of profitTransactions) {
+      const userId = tx.userId.toString();
+      const user = await this.usersService.findById(userId);
+      if (!user || !user.referredBy) continue;
+
+      const profitAmount = tx.amount; // سودی که از این سرمایه‌گذاری تولید شده
+      let currentReferrerCode = user.referredBy;
+      let level = 1;
+
+      // تا سه سطح بالا
+      while (currentReferrerCode && level <= 3) {
+        const referrer =
+          await this.usersService.findByVxCode(currentReferrerCode);
+        if (!referrer) break;
+
+        let percentage = level === 1 ? 0.15 : level === 2 ? 0.1 : 0.05;
+        const reward = profitAmount * percentage;
+
+        if (reward > 0) {
+          await this.addReferralProfit(
+            referrer._id.toString(),
+            reward,
+            user._id.toString(),
+          );
+
+          // ثبت تراکنش ریفرال
+          await this.transactionsService.createTransaction({
+            userId: referrer._id.toString(),
+            type: 'referral-profit',
+            amount: reward,
+            currency: 'USD',
+            status: 'completed',
+            note: `Referral profit (Level ${level}) from ${user.email} | source: profit ${profitAmount}`,
+          });
+
+          this.logger.log(
+            `💰 Level ${level} referral profit: +${reward.toFixed(
+              2,
+            )} USD to ${referrer.email} from ${user.email}`,
+          );
+        }
+
+        currentReferrerCode = referrer.referredBy;
+        level++;
+      }
+    }
+
+    this.logger.log(
+      '✅ Referral profit distribution completed successfully (based on daily profits only).',
+    );
+  }
 
   // 🧾 گرفتن تراکنش‌های ریفرال کاربر برای داشبورد
   async getReferralTransactions(userId: string) {
-    const transactions = await this.transactionsService.getUserTransactions(userId);
+    const transactions =
+      await this.transactionsService.getUserTransactions(userId);
     return transactions.filter((tx) => tx.type === 'referral-profit');
   }
 }
