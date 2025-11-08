@@ -110,27 +110,31 @@ async getReferralStatsCount(userId: string) {
     const rootVxCode = rootUser.vxCode;
     this.logger.debug(`🎯 Root vxCode: ${rootVxCode}`);
 
-    // 🟠 سطح 1: تمام کسانی که referralCode = vxCode کاربر اصلی دارند
+    // 🟠 سطح 1: تمام کسانی که referredBy = vxCode کاربر اصلی دارند
     const level1 = await this.userModel
-      .find({ referralCode: rootVxCode })
+      .find({ referredBy: rootVxCode })
       .select('_id vxCode email firstName lastName')
       .lean();
     this.logger.debug(`🧩 Level 1 referrals found: ${level1.length}`);
 
-    // 🟡 سطح 2: کسانی که referralCode = vxCode یکی از level1 هستند
-    const level1Codes = level1.map((u) => u.vxCode);
-    const level2 = await this.userModel
-      .find({ referralCode: { $in: level1Codes } })
-      .select('_id vxCode email firstName lastName')
-      .lean();
+    // 🟡 سطح 2: کسانی که referredBy = vxCode یکی از level1 هستند
+    const level1Codes = level1.map((u) => u.vxCode).filter(Boolean);
+    const level2 = level1Codes.length
+      ? await this.userModel
+          .find({ referredBy: { $in: level1Codes } })
+          .select('_id vxCode email firstName lastName')
+          .lean()
+      : [];
     this.logger.debug(`🧩 Level 2 referrals found: ${level2.length}`);
 
-    // 🟢 سطح 3: کسانی که referralCode = vxCode یکی از level2 هستند
-    const level2Codes = level2.map((u) => u.vxCode);
-    const level3 = await this.userModel
-      .find({ referralCode: { $in: level2Codes } })
-      .select('_id vxCode email firstName lastName')
-      .lean();
+    // 🟢 سطح 3: کسانی که referredBy = vxCode یکی از level2 هستند
+    const level2Codes = level2.map((u) => u.vxCode).filter(Boolean);
+    const level3 = level2Codes.length
+      ? await this.userModel
+          .find({ referredBy: { $in: level2Codes } })
+          .select('_id vxCode email firstName lastName')
+          .lean()
+      : [];
     this.logger.debug(`🧩 Level 3 referrals found: ${level3.length}`);
 
     // 📊 محاسبه درصد پیشرفت فرضی (مثلاً هر سطح کامل = 33%)
