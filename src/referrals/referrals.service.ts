@@ -7,6 +7,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import * as mongoose from 'mongoose';
 import { TransactionsService } from '../transactions/transactions.service'; // ✅ اضافه شد
 import { User } from '../users/schemas/user.schema';
+import { InvestmentsService } from 'src/investments/investments.service';
+
 
 @Injectable()
 export class ReferralsService {
@@ -17,6 +19,7 @@ export class ReferralsService {
     @InjectModel(User.name) private readonly userModel: Model<User>, // ✅ اضافه کن
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService, // ✅ اضافه شد
+    private readonly investmentsService: InvestmentsService, 
   ) {}
 
   // 📥 ثبت زیرمجموعه جدید (در ثبت‌نام یا پروفایل)
@@ -184,7 +187,7 @@ export class ReferralsService {
     // 🟠 سطح 1: کاربران مستقیم
     const level1Users = await this.userModel
       .find({ referredBy: rootVxCode })
-      .select('_id vxCode investments')
+      .select('_id vxCode')
       .lean();
     this.logger.debug(`📊 Level 1 referrals: ${level1Users.length}`);
 
@@ -193,7 +196,7 @@ export class ReferralsService {
     const level2Users = level1Codes.length
       ? await this.userModel
           .find({ referredBy: { $in: level1Codes } })
-          .select('_id vxCode investments')
+          .select('_id vxCode')
           .lean()
       : [];
     this.logger.debug(`📊 Level 2 referrals: ${level2Users.length}`);
@@ -203,22 +206,23 @@ export class ReferralsService {
     const level3Users = level2Codes.length
       ? await this.userModel
           .find({ referredBy: { $in: level2Codes } })
-          .select('_id vxCode investments')
+          .select('_id vxCode')
           .lean()
       : [];
     this.logger.debug(`📊 Level 3 referrals: ${level3Users.length}`);
 
     // 💰 محاسبه مجموع سرمایه‌گذاری هر سطح
-    const calculateInvestments = (users: any[]) => {
-      return users.reduce((total, user) => {
-        const userInvestments = user.investments || [];
-        return total + userInvestments.reduce((sum: number, inv: any) => sum + (Number(inv.amount) || 0), 0);
-      }, 0);
+    const calculateInvestments = async (users: any[]) => {
+      const investments = await Promise.all(users.map(async (user) => {
+        const userInvestments = await this.investmentsService.getUserInvestments(user._id);
+        return userInvestments.reduce((sum: number, inv: any) => sum + (Number(inv.amount) || 0), 0);
+      }));
+      return investments.reduce((total, investment) => total + investment, 0);
     };
 
-    const level1Investment = calculateInvestments(level1Users);
-    const level2Investment = calculateInvestments(level2Users);
-    const level3Investment = calculateInvestments(level3Users);
+    const level1Investment = await calculateInvestments(level1Users);
+    const level2Investment = await calculateInvestments(level2Users);
+    const level3Investment = await calculateInvestments(level3Users);
 
     this.logger.log(
       `✅ Referral investments: L1=${level1Investment}, L2=${level2Investment}, L3=${level3Investment}`,

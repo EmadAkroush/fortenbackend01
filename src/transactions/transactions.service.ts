@@ -31,6 +31,20 @@ export class TransactionsService {
     return await newTx.save();
   }
 
+  // 🔹 دریافت سرمایه‌گذاری‌های کاربر
+  async getUserInvestments(userId: string) {
+    return await this.transactionModel.find({
+      userId,
+      type: 'investment'
+    }).sort({ createdAt: -1 }).lean();
+  }
+
+
+
+
+
+
+
   // 🔹 آپدیت وضعیت تراکنش بر اساس paymentId
   async updateTransactionStatus(paymentId: string, status: string, txHash?: string) {
     return await this.transactionModel.findOneAndUpdate(
