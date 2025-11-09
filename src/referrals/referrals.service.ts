@@ -165,7 +165,7 @@ export class ReferralsService {
     };
   }
 
-  // 🟢 فقط محاسبه سرمایه‌گذاری‌ها (بدون پاداش)
+  // 🟢 محاسبه مجموع سرمایه‌گذاری‌ها در هر سطح
   async getReferralEarnings(userId: string) {
     this.logger.log(
       `🚀 Calculating referral investments for userId: ${userId}`,
@@ -184,7 +184,7 @@ export class ReferralsService {
     // 🟠 سطح 1: کاربران مستقیم
     const level1Users = await this.userModel
       .find({ referredBy: rootVxCode })
-      .select('_id vxCode mainBalance profitBalance')
+      .select('_id vxCode investments')
       .lean();
     this.logger.debug(`📊 Level 1 referrals: ${level1Users.length}`);
 
@@ -193,7 +193,7 @@ export class ReferralsService {
     const level2Users = level1Codes.length
       ? await this.userModel
           .find({ referredBy: { $in: level1Codes } })
-          .select('_id vxCode mainBalance profitBalance')
+          .select('_id vxCode investments')
           .lean()
       : [];
     this.logger.debug(`📊 Level 2 referrals: ${level2Users.length}`);
@@ -203,18 +203,22 @@ export class ReferralsService {
     const level3Users = level2Codes.length
       ? await this.userModel
           .find({ referredBy: { $in: level2Codes } })
-          .select('_id vxCode mainBalance profitBalance')
+          .select('_id vxCode investments')
           .lean()
       : [];
     this.logger.debug(`📊 Level 3 referrals: ${level3Users.length}`);
 
-    // 💰 محاسبه مجموع سرمایه‌گذاری هر سطح (مثلاً mainBalance)
-    const sum = (arr: any[], field: string) =>
-      arr.reduce((acc, u) => acc + (Number(u[field]) || 0), 0);
+    // 💰 محاسبه مجموع سرمایه‌گذاری هر سطح
+    const calculateInvestments = (users: any[]) => {
+      return users.reduce((total, user) => {
+        const userInvestments = user.investments || [];
+        return total + userInvestments.reduce((sum: number, inv: any) => sum + (Number(inv.amount) || 0), 0);
+      }, 0);
+    };
 
-    const level1Investment = sum(level1Users, 'mainBalance');
-    const level2Investment = sum(level2Users, 'mainBalance');
-    const level3Investment = sum(level3Users, 'mainBalance');
+    const level1Investment = calculateInvestments(level1Users);
+    const level2Investment = calculateInvestments(level2Users);
+    const level3Investment = calculateInvestments(level3Users);
 
     this.logger.log(
       `✅ Referral investments: L1=${level1Investment}, L2=${level2Investment}, L3=${level3Investment}`,
