@@ -168,7 +168,7 @@ export class ReferralsService {
     };
   }
 
-  // 🟢 محاسبه مجموع سرمایه‌گذاری‌ها در هر سطح
+  // 🟢 محاسبه مجموع سرمایه‌گذاری‌ها در هر سطح (فقط پکیج‌هایی با status = 'active')
   async getReferralEarnings(userId: string) {
     this.logger.log(
       `🚀 Calculating referral investments for userId: ${userId}`,
@@ -211,11 +211,14 @@ export class ReferralsService {
       : [];
     this.logger.debug(`📊 Level 3 referrals: ${level3Users.length}`);
 
-    // 💰 محاسبه مجموع سرمایه‌گذاری هر سطح
+    // 💰 محاسبه مجموع سرمایه‌گذاری هر سطح — فقط پکیج‌های active
     const calculateInvestments = async (users: any[]) => {
       const investments = await Promise.all(users.map(async (user) => {
         const userInvestments = await this.investmentsService.getUserInvestments(user._id);
-        return userInvestments.reduce((sum: number, inv: any) => sum + (Number(inv.amount) || 0), 0);
+        const activeInvestments = (userInvestments || []).filter(
+          (inv: any) => inv && inv.status === 'active',
+        );
+        return activeInvestments.reduce((sum: number, inv: any) => sum + (Number(inv.amount) || 0), 0);
       }));
       return investments.reduce((total, investment) => total + investment, 0);
     };
@@ -225,7 +228,7 @@ export class ReferralsService {
     const level3Investment = await calculateInvestments(level3Users);
 
     this.logger.log(
-      `✅ Referral investments: L1=${level1Investment}, L2=${level2Investment}, L3=${level3Investment}`,
+      `✅ Referral investments (active only): L1=${level1Investment}, L2=${level2Investment}, L3=${level3Investment}`,
     );
 
     return {
