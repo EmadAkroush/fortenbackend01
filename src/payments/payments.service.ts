@@ -45,34 +45,34 @@ export class PaymentsService {
       }
 
       // 🟢 ارسال درخواست به NowPayments (بدون price_amount)
-      // const response = await axios.post(
-      //   'https://api.nowpayments.io/v1/payment',
-      //   {
-      //     price_currency: 'USD',
-      //     pay_currency: network,
-      //     order_id: userId,
-      //     ipn_callback_url: `${appUrl}/payments/ipn`,
-      //     is_donation: true, // حالت donation فعال
-      //   },
-      //   {
-      //     headers: { 'x-api-key': apiKey },
-      //     timeout: 15000,
-      //   },
-      // );
-
       const response = await axios.post(
-        'https://api.nowpayments.io/v1/invoice',
+        'https://api.nowpayments.io/v1/payment',
         {
-          order_id: userId,
-          is_donation: true,
+          price_currency: 'USD',
           pay_currency: network,
+          order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
+          is_donation: true, // حالت donation فعال
         },
-        { 
-          headers: { 'x-api-key': apiKey }, 
-          timeout: 15000
-       },
+        {
+          headers: { 'x-api-key': apiKey },
+          timeout: 15000,
+        },
       );
+
+      // const response = await axios.post(
+      //   'https://api.nowpayments.io/v1/invoice',
+      //   {
+      //     order_id: userId,
+      //     is_donation: true,
+      //     pay_currency: network,
+      //     ipn_callback_url: `${appUrl}/payments/ipn`,
+      //   },
+      //   { 
+      //     headers: { 'x-api-key': apiKey }, 
+      //     timeout: 15000
+      //  },
+      // );
 
       if (!response.data?.payment_id || !response.data?.pay_address)
         throw new Error('Invalid response from NOWPayments API');
