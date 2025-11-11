@@ -20,10 +20,10 @@ export class PaymentsService {
     private readonly bonusesService: BonusesService,
   ) {}
 
-  // 🟢 ایجاد پرداخت جدید با انتخاب شبکه (TRX, BTC, USDT, ...)
-  async createTrxPayment(userId: string, amountUsd: number, network: string) {
+  // 🟢 ایجاد پرداخت بدون مبلغ ثابت (donation/floating)
+  async createDonationPayment(userId: string,amountUsd: number , network: string) {
     this.logger.log(
-      `📤 [createTrxPayment] User: ${userId}, Amount: ${amountUsd}, Network: ${network}`,
+      `📤 [createDonationPayment] User: ${userId}, Network: ${network}`,
     );
 
     try {
@@ -44,15 +44,15 @@ export class PaymentsService {
         throw new Error(`Unsupported payment network: ${network}`);
       }
 
-      // 🟢 ارسال درخواست به NowPayments
+      // 🟢 ارسال درخواست به NowPayments (بدون price_amount)
       const response = await axios.post(
         'https://api.nowpayments.io/v1/payment',
         {
-          price_amount: amountUsd,
           price_currency: 'USD',
           pay_currency: network,
           order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
+          is_donation: true, // حالت donation فعال
         },
         {
           headers: { 'x-api-key': apiKey },
@@ -63,19 +63,17 @@ export class PaymentsService {
       if (!response.data?.payment_id || !response.data?.pay_address)
         throw new Error('Invalid response from NOWPayments API');
 
-      // 🧾 ذخیره در دیتابیس
+      // 🧾 ذخیره در دیتابیس (بدون مبلغ)
       const payment = await this.paymentModel.create({
         userId,
         paymentId: response.data.payment_id,
         status: response.data.payment_status,
-        amount: amountUsd,
         currency: 'USD',
         payCurrency: network.toUpperCase(),
         payAddress: response.data.pay_address,
       });
 
-      // ✅ تراکنش اولیه (در حال پرداخت)
-      await this.transactionsService.createTransaction({
+        await this.transactionsService.createTransaction({
         userId,
         type: 'deposit',
         amount: amountUsd,
@@ -86,7 +84,7 @@ export class PaymentsService {
 
       return {
         success: true,
-        message: 'Payment created successfully',
+        message: 'Donation payment created successfully',
         paymentId: payment.paymentId,
         payAddress: response.data.pay_address,
         payCurrency: network.toUpperCase(),
@@ -107,11 +105,10 @@ export class PaymentsService {
     }
   }
 
-  // ✅ IPN Handler (تأیید پرداخت و به‌روزرسانی)
+  // ✅ IPN Handler (تأیید پرداخت و ثبت مبلغ واقعی)
   async handleIpn(data: any) {
     this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
 
-  
     const payment = await this.paymentModel.findOne({
       paymentId: data.payment_id,
     });
@@ -125,11 +122,14 @@ export class PaymentsService {
 
     payment.status = data.payment_status;
 
-    // 🧾 همیشه لاگ تراکنش IPN (صرف‌نظر از نوع وضعیت)
+    // مبلغ واقعی پرداخت‌شده
+    const paidAmount = data.actually_paid || data.pay_amount || 0;
+
+    // 🧾 ثبت تراکنش IPN
     await this.transactionsService.createTransaction({
       userId: payment.userId,
       type: 'deposit',
-      amount: payment.amount,
+      amount: paidAmount,
       currency: 'USD',
       status: data.payment_status,
       note: `IPN update: ${data.payment_status} (${payment.payCurrency}) #${payment.paymentId}`,
@@ -140,18 +140,19 @@ export class PaymentsService {
 
       payment.confirmedAt = new Date();
       payment.txHash = data.payin_hash;
+      payment.amount = paidAmount;
 
       await this.usersService.addBalance(
         payment.userId,
         'mainBalance',
-        payment.amount,
+        paidAmount,
       );
 
       // 🎁 بررسی پاداش لیدر
       try {
         await this.bonusesService.checkAndAwardReferralBonus(
           payment.userId,
-          payment.amount,
+          paidAmount,
         );
       } catch (bonusError) {
         this.logger.warn(
@@ -162,7 +163,7 @@ export class PaymentsService {
 
     await payment.save();
     this.logger.log(
-      `💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status}`,
+      `💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status} | Amount: ${payment.amount}`,
     );
   }
 }
