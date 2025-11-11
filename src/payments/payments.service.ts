@@ -21,9 +21,9 @@ export class PaymentsService {
   ) {}
 
 // 🟢 ایجاد پرداخت آزاد (کاربر هر مبلغی پرداخت کند قبول شود)
-async createFreePayment(userId: string, network: string) {
+async createTrxPayment(userId: string, amountUsd: number, network: string) {
   this.logger.log(
-    `📤 [createFreePayment] User: ${userId}, Network: ${network}`,
+    `📤 [createTrxPayment] User: ${userId}, Network: ${network}`,
   );
 
   try {
