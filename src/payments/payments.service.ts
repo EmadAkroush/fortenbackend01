@@ -13,18 +13,18 @@ export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
 
   constructor(
-    @InjectModel(Payment.name) private paymentModel: Model<Payment>,
+    @InjectModel(Payment.name)
+    private paymentModel: Model<Payment>,
     private readonly config: ConfigService,
     private readonly usersService: UsersService,
     private readonly transactionsService: TransactionsService,
     private readonly bonusesService: BonusesService,
   ) {}
 
-  // 🟢 ایجاد پرداخت آزاد (کاربر هر مبلغی پرداخت کند قبول شود)
-  // 🟢 ایجاد پرداخت آزاد با مبلغ حداقل
+  // 🟢 ایجاد پرداخت جدید با انتخاب شبکه (TRX, BTC, USDT, ...)
   async createTrxPayment(userId: string, amountUsd: number, network: string) {
     this.logger.log(
-      `📤 [createTrxPayment] User: ${userId}, Network: ${network}`,
+      `📤 [createTrxPayment] User: ${userId}, Amount: ${amountUsd}, Network: ${network}`,
     );
 
     try {
@@ -39,25 +39,21 @@ export class PaymentsService {
         throw new Error('Server configuration error: Missing APP_URL');
 
       const supportedNetworks = ['MATIC', 'USDTBSC', 'BNBBSC', 'USDTMATIC'];
+
       if (!supportedNetworks.includes(network)) {
         this.logger.warn(`⚠️ Unsupported network requested: ${network}`);
         throw new Error(`Unsupported payment network: ${network}`);
       }
 
-      // 💡 استفاده از مبلغ حداقل (1 دلار) برای NowPayments
-      // کاربر می‌تواند بیشتر از این مبلغ پرداخت کند
-      const minimalAmount = 1;
-
+      // 🟢 ارسال درخواست به NowPayments
       const response = await axios.post(
-        'https://api.nowpayments.io/v1/invoice',
+        'https://api.nowpayments.io/v1/payment',
         {
-          price_amount: minimalAmount, // اجباری - مبلغ حداقل
+          price_amount: amountUsd,
           price_currency: 'USD',
           pay_currency: network,
-          order_id: `${userId}_${Date.now()}`,
+          order_id: userId,
           ipn_callback_url: `${appUrl}/payments/ipn`,
-          is_fixed_rate: false,
-          is_fee_paid_by_user: false,
         },
         {
           headers: { 'x-api-key': apiKey },
@@ -65,122 +61,129 @@ export class PaymentsService {
         },
       );
 
-      if (!response.data?.payment_id || !response.data?.pay_address) {
+      if (!response.data?.payment_id || !response.data?.pay_address)
         throw new Error('Invalid response from NOWPayments API');
-      }
 
       // 🧾 ذخیره در دیتابیس
       const payment = await this.paymentModel.create({
         userId,
         paymentId: response.data.payment_id,
         status: response.data.payment_status,
-        amount: minimalAmount, // مقدار درخواستی (حداقل)
-        actualAmount: 0, // مقدار واقعی که کاربر پرداخت می‌کند
+        amount: amountUsd,
         currency: 'USD',
         payCurrency: network.toUpperCase(),
         payAddress: response.data.pay_address,
       });
 
-      // ✅ تراکنش اولیه
+      // ✅ تراکنش اولیه (در حال پرداخت)
       await this.transactionsService.createTransaction({
         userId,
         type: 'deposit',
-        amount: minimalAmount,
+        amount: amountUsd,
         currency: 'USD',
         status: 'pending',
-        note: `Flexible payment created (${network.toUpperCase()}) - Min: $${minimalAmount} #${payment.paymentId}`,
+        note: `Payment created (${network.toUpperCase()}) #${payment.paymentId}`,
       });
 
       return {
         success: true,
-        message: `Payment address generated. Minimum amount: $${minimalAmount}`,
+        message: 'Payment created successfully',
         paymentId: payment.paymentId,
         payAddress: response.data.pay_address,
         payCurrency: network.toUpperCase(),
-        minAmount: minimalAmount,
       };
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (axios.isAxiosError(error))
         this.logger.error(
           `❌ [AxiosError] ${error.message}`,
           JSON.stringify(error.response?.data || {}, null, 2),
         );
-        // خطای واضح‌تر برای کاربر
-        throw new Error(
-          `Payment gateway error: ${error.response?.data?.message || error.message}`,
-        );
-      } else {
+      else
         this.logger.error(
-          '❌ [Free Payment Creation Error]',
+          '❌ [Payment Creation Error]',
           error.stack || error.message,
         );
-        throw new Error(error?.message || 'Payment creation failed');
-      }
+
+      throw new Error(error?.message || 'Payment creation failed');
     }
   }
-  // ✅ IPN Handler اصلاح شده
+
+  // ✅ IPN Handler (تأیید پرداخت و به‌روزرسانی)
   async handleIpn(data: any) {
     this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
 
-    const payment = await this.paymentModel.findOne({
-      paymentId: data.payment_id,
-    });
+    try {
+      const payment = await this.paymentModel.findOne({
+        paymentId: data.payment_id,
+      });
 
-    if (!payment) {
-      this.logger.warn(
-        `⚠️ No matching payment found for IPN (id: ${data.payment_id})`,
-      );
-      return;
-    }
-
-    // 🔄 به‌روزرسانی وضعیت
-    payment.status = data.payment_status;
-
-    // 💰 اگر مبلغ واقعی از NowPayments دریافت شده، آن را ذخیره کنید
-    if (data.actually_paid) {
-      payment.actualAmount = data.actually_paid;
-    }
-
-    // 🧾 همیشه لاگ تراکنش IPN
-    await this.transactionsService.createTransaction({
-      userId: payment.userId,
-      type: 'deposit',
-      amount: payment.actualAmount || payment.amount,
-      currency: 'USD',
-      status: data.payment_status,
-      note: `IPN update: ${data.payment_status} (${payment.payCurrency}) #${payment.paymentId}`,
-    });
-
-    if (data.payment_status === 'finished') {
-      this.logger.log(`✅ Payment finished for user: ${payment.userId}`);
-
-      payment.confirmedAt = new Date();
-      payment.txHash = data.payin_hash;
-
-      // 💵 افزودن موجودی واقعی به کاربر
-      const finalAmount = payment.actualAmount || payment.amount;
-      await this.usersService.addBalance(
-        payment.userId,
-        'mainBalance',
-        finalAmount,
-      );
-
-      // 🎁 بررسی پاداش لیدر
-      try {
-        await this.bonusesService.checkAndAwardReferralBonus(
-          payment.userId,
-          finalAmount,
-        );
-      } catch (bonusError) {
+      if (!payment) {
         this.logger.warn(
-          `⚠️ Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
+          `⚠️ No matching payment found for IPN (id: ${data.payment_id})`,
         );
+        return;
       }
-    }
 
-    await payment.save();
-    this.logger.log(
-      `💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status} | Amount: ${payment.actualAmount}`,
-    );
+      // 🧾 مبلغ واقعی پرداخت‌شده از NowPayments
+      const actualAmount =
+        data.actually_paid && Number(data.actually_paid) > 0
+          ? Number(data.actually_paid)
+          : payment.amount;
+
+      // 🔁 بروزرسانی وضعیت پرداخت
+      payment.status = data.payment_status;
+
+      // 🧾 همیشه لاگ تراکنش IPN (صرف‌نظر از نوع وضعیت)
+      await this.transactionsService.createTransaction({
+        userId: payment.userId,
+        type: 'deposit',
+        amount: actualAmount,
+        currency: 'USD',
+        status: data.payment_status,
+        note: `IPN update: ${data.payment_status} (${payment.payCurrency}) #${payment.paymentId}`,
+      });
+
+      // ✅ اگر پرداخت کامل یا جزئی بود
+      if (
+        data.payment_status === 'finished' ||
+        data.payment_status === 'partially_paid'
+      ) {
+        this.logger.log(
+          `✅ Payment confirmed (${data.payment_status}) for user: ${payment.userId}`,
+        );
+
+        payment.confirmedAt = new Date();
+        payment.txHash = data.payin_hash;
+        payment.amount = actualAmount; // 👈 ثبت مبلغ واقعی پرداخت‌شده
+
+        // 👇 حتی در حالت partially_paid هم موجودی افزایش یابد
+        await this.usersService.addBalance(
+          payment.userId,
+          'mainBalance',
+          actualAmount,
+        );
+
+        // 🎁 بررسی پاداش لیدر
+        try {
+          await this.bonusesService.checkAndAwardReferralBonus(
+            payment.userId,
+            actualAmount,
+          );
+        } catch (bonusError) {
+          this.logger.warn(
+            `⚠️ Bonus check failed for user ${payment.userId}: ${bonusError.message}`,
+          );
+        }
+      }
+
+      await payment.save();
+      this.logger.log(
+        `💾 Payment updated in DB: ${payment.paymentId} | Status: ${payment.status} | Amount: ${payment.amount}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `❌ [IPN Handler Error] ${error.stack || error.message}`,
+      );
+    }
   }
 }
