@@ -21,7 +21,8 @@ export class PaymentsService {
   ) {}
 
 // 🟢 ایجاد پرداخت آزاد (کاربر هر مبلغی پرداخت کند قبول شود)
-async createTrxPayment(userId: string, amountUsd: number, network: string) {
+// 🟢 ایجاد پرداخت آزاد با مبلغ حداقل
+async createTrxPayment(userId: string, amountUsd: number , network: string) {
   this.logger.log(
     `📤 [createTrxPayment] User: ${userId}, Network: ${network}`,
   );
@@ -39,18 +40,20 @@ async createTrxPayment(userId: string, amountUsd: number, network: string) {
       throw new Error(`Unsupported payment network: ${network}`);
     }
 
-    // 🟢 ایجاد پرداخت با مبلغ 0 (یا حداقل ممکن)
-    // NowPayments ممکن است به مبلغ حداقل نیاز داشته باشد
-    const minimalAmount = 1; // 1 USD حداقل
+    // 💡 استفاده از مبلغ حداقل (1 دلار) برای NowPayments
+    // کاربر می‌تواند بیشتر از این مبلغ پرداخت کند
+    const minimalAmount = 1;
     
     const response = await axios.post(
       'https://api.nowpayments.io/v1/payment',
       {
-        price_amount: minimalAmount, // یا 0 اگر NowPayments اجازه دهد
+        price_amount: minimalAmount, // اجباری - مبلغ حداقل
         price_currency: 'USD',
         pay_currency: network,
-        order_id: `${userId}_${Date.now()}`, // اضافه کردن timestamp برای یکتا بودن
+        order_id: `${userId}_${Date.now()}`,
         ipn_callback_url: `${appUrl}/payments/ipn`,
+        // 🔄 اضافه کردن پارامتر برای پرداخت بیشتر
+        pay_amount: null, // اجازه می‌دهد کاربر بیشتر پرداخت کند
       },
       {
         headers: { 'x-api-key': apiKey },
@@ -62,36 +65,37 @@ async createTrxPayment(userId: string, amountUsd: number, network: string) {
       throw new Error('Invalid response from NOWPayments API');
     }
 
-    // 🧾 ذخیره در دیتابیس با amount=0
+    // 🧾 ذخیره در دیتابیس
     const payment = await this.paymentModel.create({
       userId,
       paymentId: response.data.payment_id,
       status: response.data.payment_status,
-      amount: 0, // مقدار اولیه صفر
-      actualAmount: 0, // مقدار واقعی پرداخت شده
+      amount: minimalAmount, // مقدار درخواستی (حداقل)
+      actualAmount: 0, // مقدار واقعی که کاربر پرداخت می‌کند
       currency: 'USD',
       payCurrency: network.toUpperCase(),
       payAddress: response.data.pay_address,
-      isFlexible: true, // پرچم پرداخت آزاد
+
     });
 
-    // ✅ تراکنش اولیه با مقدار صفر
+    // ✅ تراکنش اولیه
     await this.transactionsService.createTransaction({
       userId,
       type: 'deposit',
-      amount: 0,
+      amount: minimalAmount,
       currency: 'USD',
       status: 'pending',
-      note: `Flexible payment created (${network.toUpperCase()}) #${payment.paymentId}`,
+      note: `Flexible payment created (${network.toUpperCase()}) - Min: $${minimalAmount} #${payment.paymentId}`,
     });
 
     return {
       success: true,
-      message: 'Payment address generated successfully',
+      message: `Payment address generated. Minimum amount: $${minimalAmount}`,
       paymentId: payment.paymentId,
       payAddress: response.data.pay_address,
       payCurrency: network.toUpperCase(),
-      isFlexible: true, // به فرانت اند اطلاع دهید که این پرداخت آزاد است
+      minAmount: minimalAmount,
+ 
     };
 
   } catch (error) {
@@ -100,16 +104,17 @@ async createTrxPayment(userId: string, amountUsd: number, network: string) {
         `❌ [AxiosError] ${error.message}`,
         JSON.stringify(error.response?.data || {}, null, 2),
       );
+      // خطای واضح‌تر برای کاربر
+      throw new Error(`Payment gateway error: ${error.response?.data?.message || error.message}`);
     } else {
       this.logger.error(
         '❌ [Free Payment Creation Error]',
         error.stack || error.message,
       );
+      throw new Error(error?.message || 'Payment creation failed');
     }
-    throw new Error(error?.message || 'Payment creation failed');
   }
 }
-
 // ✅ IPN Handler اصلاح شده
 async handleIpn(data: any) {
   this.logger.log(`📩 [IPN Received] Data: ${JSON.stringify(data, null, 2)}`);
