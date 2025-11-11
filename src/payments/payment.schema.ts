@@ -6,7 +6,7 @@ export class Payment extends Document {
   @Prop({ required: true })
   userId: string;
 
-  @Prop({ required: true })
+  @Prop()
   amount: number;
 
   @Prop({ default: 'TRX' })
