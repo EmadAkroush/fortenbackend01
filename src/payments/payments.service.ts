@@ -21,9 +21,9 @@ export class PaymentsService {
   ) {}
 
   // 🟢 ایجاد پرداخت بدون مبلغ ثابت (donation/floating)
-  async createDonationPayment(userId: string,amountUsd: number , network: string) {
+  async createTrxPayment(userId: string,amountUsd: number , network: string) {
     this.logger.log(
-      `📤 [createDonationPayment] User: ${userId}, Network: ${network}`,
+      `📤 [createTrxPayment] User: ${userId}, Network: ${network}`,
     );
 
     try {
