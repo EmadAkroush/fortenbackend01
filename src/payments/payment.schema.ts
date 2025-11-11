@@ -9,6 +9,9 @@ export class Payment extends Document {
   @Prop()
   amount: number;
 
+  @Prop()
+  actualAmount: number;
+
   @Prop({ default: 'TRX' })
   currency: string;
 
