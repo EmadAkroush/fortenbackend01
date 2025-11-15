@@ -20,7 +20,8 @@ export class AuthController {
 
   // 🟢 Register new user
   @Post('register')
-  async register(@Body() dto: RegisterDto) {
+  async register(@Body() dto: RegisterDto & { recaptchaToken?: string }) {
+    // ارسال توکن reCAPTCHA به سرویس احراز هویت
     return this.authService.register(dto);
   }
 
@@ -32,15 +33,17 @@ export class AuthController {
 
   // 🟢 Login
   @Post('login')
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto.email, dto.password);
+  async login(@Body() dto: LoginDto & { recaptchaToken?: string }) {
+    // ارسال توکن reCAPTCHA به سرویس احراز هویت
+    return this.authService.login(dto.email, dto.password, dto.recaptchaToken);
   }
 
   // 🟠 Refresh JWT tokens
   @Get('refresh')
   async refresh(@Req() req: Request) {
-    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-    return this.authService.refresh(authHeader as string);
+    const authHeader =
+      (req.headers['authorization'] || req.headers['Authorization']) as string;
+    return this.authService.refresh(authHeader);
   }
 
   // 🔴 Logout (requires valid JWT)
