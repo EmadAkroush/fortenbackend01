@@ -49,10 +49,7 @@ export class AuthService {
 
   // === Register User ===
   async register(dto: any) {
-    // 🧠 بررسی reCAPTCHA قبل از هر چیز
-    if (!dto.recaptchaToken)
-      throw new BadRequestException('Missing reCAPTCHA token');
-    await this.verifyRecaptcha(dto.recaptchaToken);
+
 
     const existingUser = await this.userModel.findOne({ email: dto.email });
     if (existingUser) throw new ConflictException('Email already in use');

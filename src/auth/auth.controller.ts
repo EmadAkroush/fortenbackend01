@@ -20,7 +20,7 @@ export class AuthController {
 
   // 🟢 Register new user
   @Post('register')
-  async register(@Body() dto: RegisterDto & { recaptchaToken?: string }) {
+  async register(@Body() dto: RegisterDto ) {
     // ارسال توکن reCAPTCHA به سرویس احراز هویت
     return this.authService.register(dto);
   }
