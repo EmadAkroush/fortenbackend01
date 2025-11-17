@@ -4,7 +4,6 @@ import {
   Post,
   Body,
   Param,
-  Req,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
@@ -15,12 +14,20 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
+  // ✅ دریافت همه تراکنش‌ها برای سوپر ادمین
+  @UseGuards(JwtAuthGuard)
+  @Get('all')
+  async getAllTransactions() {
+    return this.transactionsService.getAllTransactionsForAdmin();
+  }
+
   // 🔹 دریافت لیست تراکنش‌های کاربر
   @UseGuards(JwtAuthGuard)
   @Post('my')
   async getUserTransactions(@Body() body: { userId: string }) {
     const userId = body.userId;
     if (!userId) throw new BadRequestException('User ID is required');
+
     return this.transactionsService.getUserTransactions(userId);
   }
 
@@ -30,10 +37,11 @@ export class TransactionsController {
   async getTransaction(@Param('id') id: string) {
     const tx = await this.transactionsService.getTransactionById(id);
     if (!tx) throw new BadRequestException('Transaction not found');
+
     return tx;
   }
 
-  // 🔹 ایجاد تراکنش جدید (مثلاً توسط مدیر یا برای تست)
+  // 🔹 ایجاد تراکنش جدید دستی توسط ادمین
   @UseGuards(JwtAuthGuard)
   @Post('create')
   async createTransaction(
@@ -59,7 +67,7 @@ export class TransactionsController {
     });
   }
 
-  // 🔹 درخواست برداشت از حساب (10٪ کارمزد)
+  // 🔹 درخواست برداشت (10٪ کارمزد)
   @UseGuards(JwtAuthGuard)
   @Post('withdraw')
   async requestWithdrawal(@Body() body: { userId: string; amount: number }) {

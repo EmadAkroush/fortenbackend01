@@ -11,6 +11,17 @@ export class TransactionsService {
     @InjectModel(User.name) private userModel: Model<User>,
   ) {}
 
+
+  // 🔥 دریافت لیست کامل تراکنش‌ها برای سوپر ادمین (بدون فیلتر + بدون پیجینیشن)
+async getAllTransactionsForAdmin() {
+  return await this.transactionModel
+    .find()
+    .populate('userId', 'email fullname phone') // فقط فیلدهای مهم یوزر
+    .sort({ createdAt: -1 }) // مرتب‌سازی بر اساس جدیدترین تراکنش
+    .lean();
+}
+
+
   // 🔹 ایجاد تراکنش جدید
   async createTransaction(data: {
     userId: string;
