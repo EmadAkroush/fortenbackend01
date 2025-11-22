@@ -70,7 +70,7 @@ async getAllTransactionsForAdmin() {
   // 🔹 لیست تراکنش‌های کاربر
 async getUserTransactions(userId: string) {
   return await this.transactionModel.find({
-    userId: new mongoose.Types.ObjectId(userId),
+    userId: userId,
   })
   .sort({ createdAt: -1 })
   .lean();
