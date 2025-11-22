@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Transaction } from './schemas/transactions.schema';
 import { User } from '../users/schemas/user.schema';
+import mongoose from "mongoose";
+
 
 @Injectable()
 export class TransactionsService {
@@ -66,9 +68,13 @@ async getAllTransactionsForAdmin() {
   }
 
   // 🔹 لیست تراکنش‌های کاربر
-  async getUserTransactions(userId: string) {
-    return await this.transactionModel.find({ userId }).sort({ createdAt: -1 }).lean();
-  }
+async getUserTransactions(userId: string) {
+  return await this.transactionModel.find({
+    userId: new mongoose.Types.ObjectId(userId),
+  })
+  .sort({ createdAt: -1 })
+  .lean();
+}
 
   // 🔹 گرفتن جزئیات تراکنش خاص
   async getTransactionById(id: string) {
