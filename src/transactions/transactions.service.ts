@@ -76,7 +76,9 @@ async getUserTransactions(userId: string) {
     const filter = {
       $or: [
         { userId: objectId },  // رکوردهای جدید
-        { userId: userId }     // رکوردهای قدیمی که string هستند
+        { userId: userId },    // رکوردهای قدیمی که string هستند
+        { userId: { $eq: objectId } }, // رکوردهایی که به صورت ObjectId هستند
+        { userId: { $eq: userId } }     // رکوردهایی که به صورت string هستند
       ]
     };
 
