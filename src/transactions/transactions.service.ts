@@ -66,15 +66,25 @@ async getAllTransactionsForAdmin() {
       { new: true },
     );
   }
+  // 🔹 لیست تراکنش‌های کاربر (با لاگ برای دیباگ)
+  async getUserTransactions(userId: string) {
+    console.log(`[TransactionsService] getUserTransactions called with userId=${userId}`);
+    try {
+      const filter = { userId: userId };
+      console.log('[TransactionsService] query filter:', filter);
 
-  // 🔹 لیست تراکنش‌های کاربر
-async getUserTransactions(userId: string) {
-  return await this.transactionModel.find({
-    userId: userId,
-  })
-  .sort({ createdAt: -1 })
-  .lean();
-}
+      const txs = await this.transactionModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .lean();
+
+      console.log(`[TransactionsService] found ${Array.isArray(txs) ? txs.length : 0} transactions`);
+      return txs;
+    } catch (error) {
+      console.error('[TransactionsService] getUserTransactions error:', error);
+      throw error;
+    }
+  }
 
   // 🔹 گرفتن جزئیات تراکنش خاص
   async getTransactionById(id: string) {
