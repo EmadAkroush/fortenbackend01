@@ -1,10 +1,11 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import * as mongoose from 'mongoose';
 
 @Schema({ timestamps: true })
 export class Transaction extends Document {
-  @Prop({ required: true })
-  userId: string; // شناسه کاربر
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
+  userId: string;
 
   @Prop({ required: true })
   type: string; // deposit, withdraw, profit, referral, bonus
