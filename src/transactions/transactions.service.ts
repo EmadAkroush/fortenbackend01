@@ -67,24 +67,35 @@ async getAllTransactionsForAdmin() {
     );
   }
   // 🔹 لیست تراکنش‌های کاربر (با لاگ برای دیباگ)
-  async getUserTransactions(userId: string) {
-    console.log(`[TransactionsService] getUserTransactions called with userId=${userId}`);
-    try {
-      const filter = { userId: userId };
-      console.log('[TransactionsService] query filter:', filter);
+async getUserTransactions(userId: string) {
+  console.log(`[TransactionsService] getUserTransactions called with userId=${userId}`);
 
-      const txs = await this.transactionModel
-        .find(filter)
-        .sort({ createdAt: -1 })
-        .lean();
+  try {
+    const objectId = new mongoose.Types.ObjectId(userId);
 
-      console.log(`[TransactionsService] found ${Array.isArray(txs) ? txs.length : 0} transactions`);
-      return txs;
-    } catch (error) {
-      console.error('[TransactionsService] getUserTransactions error:', error);
-      throw error;
-    }
+    const filter = {
+      $or: [
+        { userId: objectId },  // رکوردهای جدید
+        { userId: userId }     // رکوردهای قدیمی که string هستند
+      ]
+    };
+
+    console.log('[TransactionsService] final filter:', filter);
+
+    const txs = await this.transactionModel
+      .find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log(`[TransactionsService] found ${txs.length} transactions`);
+    return txs;
+
+  } catch (error) {
+    console.error('[TransactionsService] getUserTransactions error:', error);
+    throw error;
   }
+}
+
 
   // 🔹 گرفتن جزئیات تراکنش خاص
   async getTransactionById(id: string) {
