@@ -21,6 +21,16 @@ export class TransactionsController {
     return this.transactionsService.getAllTransactionsForAdmin();
   }
 
+
+    // 🔹 دریافت لیست تراکنش‌های کاربر
+  @UseGuards(JwtAuthGuard)
+  @Post('updatestatusadmin')
+  async updateStatusAdmin(@Body() body) {
+   
+    return this.transactionsService.updateTransactionStatusAdmin(body.id, body.status);
+  }
+
+
   // 🔹 دریافت لیست تراکنش‌های کاربر
   @UseGuards(JwtAuthGuard)
   @Post('my')

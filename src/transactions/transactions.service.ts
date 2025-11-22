@@ -117,4 +117,12 @@ async getAllTransactionsForAdmin() {
   });
 }
 
+ async updateTransactionStatusAdmin(id: string, status: string) {
+    return await this.transactionModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true },
+    );
+  }
+
 }
