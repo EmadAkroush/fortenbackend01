@@ -16,7 +16,7 @@ export class TransactionsService {
 async getAllTransactionsForAdmin() {
   return await this.transactionModel
     .find()
-    .populate('userId', 'email fullname phone') // فقط فیلدهای مهم یوزر
+    .populate({ path: 'userId', select: 'email fullname phone' })  // فقط فیلدهای مهم یوزر
     .sort({ createdAt: -1 }) // مرتب‌سازی بر اساس جدیدترین تراکنش
     .lean();
 }
